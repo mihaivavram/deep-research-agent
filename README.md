@@ -1,6 +1,6 @@
 # Deep Research Agent
 
-A Claude Code research agent that searches up to 29 sources in parallel and 
+A Claude Code research agent that searches up to 34 sources in parallel and 
 distills everything into a structured, ranked report. Runs on `claude-opus-4-6` 
 for best research quality.
 
@@ -82,6 +82,16 @@ The agent will announce: `Created new skill: /quora-search — Quora questions a
 | `/news-search <query>` | Current events, breaking news, time-sensitive developments |
 | `/hackernews-search <query>` | Developer culture, startups, tech industry |
 
+### Optional: Social & community — used automatically for opinion, professional discourse, or workplace queries
+
+| Command | What it finds |
+|---|---|
+| `/twitter-search <query>` | Twitter/X — real-time discourse, expert hot-takes, viral threads, breaking signals |
+| `/linkedin-search <query>` | LinkedIn — Pulse long-form articles, public posts, profile credentialing, job postings |
+| `/threads-search <query>` | Threads (Meta) — creator/designer/marketer commentary |
+| `/blind-search <query>` | Blind — verified-employee anonymous comp data, layoffs, RTO, internal culture |
+| `/quora-search <query>` | Quora — long-form expert Q&A, niche explainers, credentialed answers |
+
 ### Optional: Product & market research — used automatically for product/competitive/market queries
 
 | Command | What it finds |
@@ -129,7 +139,9 @@ The agent automatically maps your question type to the right skill subset:
 | What do users hate / what's the gap? | `g2-search`, `amazon-reviews`, `reddit-search`, `appstore-search` |
 | Where is money and talent flowing? | `crunchbase-search`, `glassdoor-search` |
 | How has a competitor evolved / pivoted? | `wayback-search`, `news-search` |
-| What's the market narrative? | `web-search`, `news-search`, `hackernews-search` |
+| What's the market narrative? | `web-search`, `news-search`, `hackernews-search`, `twitter-search` |
+| What's it actually like to work at this company? | `blind-search`, `glassdoor-search`, `reddit-search` |
+| What do experts publicly say about this topic? | `twitter-search`, `linkedin-search`, `quora-search` |
 | B2C physical product? | `amazon-reviews`, `appstore-search`, `reddit-search` |
 | B2B SaaS product? | `g2-search`, `producthunt-search`, `crunchbase-search`, `glassdoor-search` |
 

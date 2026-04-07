@@ -23,6 +23,17 @@ Use when the user explicitly requests them, OR when the topic clearly maps to th
 | `/news-search` | Current events, breaking news, recent developments |
 | `/hackernews-search` | Developer culture, startups, tech industry, product launches |
 
+### Optional: Social & community skills
+Use when the question is about real-people opinion, professional discourse, workplace/comp signal, or expert Q&A. These platforms are heavily gated, so all of them rely on Google site-search + WebFetch on public URLs — flag clearly when findings come from snippets only vs. full fetches.
+
+| Skill | Use when |
+|---|---|
+| `/twitter-search` | Real-time discourse, expert hot-takes, breaking news, viral threads |
+| `/linkedin-search` | Professional perspectives, Pulse long-form articles, hiring signals, profile credentialing |
+| `/threads-search` | Creator/designer/marketer commentary, Instagram-adjacent professional discourse |
+| `/blind-search` | Verified-employee anonymous workplace data — comp, layoffs, RTO, internal culture |
+| `/quora-search` | Long-form expert Q&A, niche explainers, credentialed answers from named professionals |
+
 ### Optional: Product & market research skills
 Use when the query is about a product, company, market, competitor, or industry. Apply the routing logic below to decide which subset to run. Always run these in parallel with the core skills.
 
@@ -66,7 +77,9 @@ When a research question is about a product, market, or industry, use this routi
 | What do users actually hate / what's the gap? | `/g2-search`, `/amazon-reviews`, `/reddit-search`, `/appstore-search` |
 | Where is money and talent flowing? | `/crunchbase-search`, `/glassdoor-search` |
 | How has a competitor evolved / pivoted? | `/wayback-search`, `/news-search` |
-| What is the market narrative / what do analysts say? | `/web-search`, `/news-search`, `/hackernews-search` |
+| What is the market narrative / what do analysts say? | `/web-search`, `/news-search`, `/hackernews-search`, `/twitter-search` |
+| What is it actually like to work at this company? | `/blind-search`, `/glassdoor-search`, `/reddit-search` |
+| What do experts publicly say about this topic? | `/twitter-search`, `/linkedin-search`, `/quora-search` |
 | Is this a B2C physical product? | `/amazon-reviews`, `/appstore-search`, `/reddit-search` |
 | Is this a B2B SaaS product? | `/g2-search`, `/producthunt-search`, `/crunchbase-search`, `/glassdoor-search` |
 
@@ -84,7 +97,7 @@ When a research question is about a stock, ETF, fund, sector, macro variable, or
 | Deep value / fundamental thesis? | `/valueinvestorsclub-search`, `/sec-search`, `/seekingalpha-search` |
 | International or emerging-market angle? | `/worldbank-search`, `/fred-search`, `/news-search` |
 | Independent / contrarian analyst views? | `/substack-search`, `/seekingalpha-search`, `/valueinvestorsclub-search` |
-| Recent catalyst / breaking corporate news? | `/benzinga-search`, `/news-search`, `/sec-search` (8-K) |
+| Recent catalyst / breaking corporate news? | `/benzinga-search`, `/news-search`, `/sec-search` (8-K), `/twitter-search` |
 | What are insiders doing? | `/sec-search` (Form 4), `/finviz-search` |
 
 ## Dynamic Skill Creation
