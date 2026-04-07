@@ -1,6 +1,6 @@
 # Deep Research Agent
 
-A Claude Code research agent that searches up to 17 sources in parallel and 
+A Claude Code research agent that searches up to 29 sources in parallel and 
 distills everything into a structured, ranked report. Runs on `claude-opus-4-6` 
 for best research quality.
 
@@ -39,6 +39,11 @@ What's the competitive landscape for AI writing tools?
 /g2-search Notion alternatives
 /crunchbase-search vertical SaaS for construction
 /wayback-search linear.app
+
+Should I buy NVDA at current levels?
+/sec-search NVDA latest 10-Q
+/macrotrends-search NVDA gross margin history
+/fred-search 10-year treasury yield
 ```
 
 ### Searching a source that doesn't have a skill yet
@@ -90,6 +95,23 @@ The agent will announce: `Created new skill: /quora-search — Quora questions a
 | `/glassdoor-search <query>` | Employee reviews + job postings as proxy for strategic priorities |
 | `/wayback-search <query>` | Competitor positioning, pricing, and messaging evolution over time |
 
+### Optional: Investing & financial research — used automatically for stock / fund / macro queries
+
+| Command | What it finds |
+|---|---|
+| `/sec-search <query>` | SEC EDGAR — 10-K, 10-Q, 8-K, Form 4 insider transactions, proxy statements |
+| `/finviz-search <query>` | Quote-page snapshot: valuation, profitability, short interest, ownership |
+| `/macrotrends-search <query>` | 20+ year historical financials — margin, FCF, ROIC trend lines |
+| `/seekingalpha-search <query>` | Long/short investor theses, earnings reactions, contributor track records |
+| `/fred-search <query>` | Federal Reserve macro data — CPI, yield curve, M2, payrolls, credit spreads |
+| `/stocktwits-search <query>` | Real-time retail sentiment ratios and message-volume catalyst spikes |
+| `/benzinga-search <query>` | Analyst rating changes, unusual options flow, breaking corporate news |
+| `/bogleheads-search <query>` | Long-term passive investing forum + wiki — fund/ETF and tax placement |
+| `/valueinvestorsclub-search <query>` | Vetted deep fundamental write-ups from professional value investors |
+| `/substack-search <query>` | Independent analyst newsletters — macro, quant, sector deep work |
+| `/cme-fedwatch-search <query>` | Market-implied probabilities for upcoming FOMC rate decisions |
+| `/worldbank-search <query>` | Country GDP, inflation, debt, demographics — international/EM angles |
+
 ### Dynamic skills — created on demand
 
 If you name any source that doesn't have a skill, the agent writes the command file, runs the search, and saves it for future sessions. The agent grows over time.
@@ -110,6 +132,25 @@ The agent automatically maps your question type to the right skill subset:
 | What's the market narrative? | `web-search`, `news-search`, `hackernews-search` |
 | B2C physical product? | `amazon-reviews`, `appstore-search`, `reddit-search` |
 | B2B SaaS product? | `g2-search`, `producthunt-search`, `crunchbase-search`, `glassdoor-search` |
+
+---
+
+## Investing Research Routing
+
+For stock, ETF, fund, sector, or macro questions, the agent maps to the right financial sources:
+
+| Research question | Skills prioritized |
+|---|---|
+| Is this company financially healthy? | `sec-search`, `macrotrends-search`, `finviz-search` |
+| What's the analyst / Wall Street view? | `benzinga-search`, `seekingalpha-search`, `news-search` |
+| What's the macro backdrop? | `fred-search`, `cme-fedwatch-search`, `news-search` |
+| What's retail sentiment right now? | `stocktwits-search`, `reddit-search` (r/investing, r/wallstreetbets) |
+| Long-term passive / ETF research? | `bogleheads-search`, `macrotrends-search`, `finviz-search` |
+| Deep value / fundamental thesis? | `valueinvestorsclub-search`, `sec-search`, `seekingalpha-search` |
+| International or emerging-market angle? | `worldbank-search`, `fred-search`, `news-search` |
+| Independent / contrarian analyst views? | `substack-search`, `seekingalpha-search`, `valueinvestorsclub-search` |
+| Recent catalyst / breaking corporate news? | `benzinga-search`, `news-search`, `sec-search` (8-K) |
+| What are insiders doing? | `sec-search` (Form 4), `finviz-search` |
 
 ---
 

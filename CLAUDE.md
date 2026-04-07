@@ -37,6 +37,24 @@ Use when the query is about a product, company, market, competitor, or industry.
 | `/glassdoor-search` | Competitor culture signals, hiring patterns as strategic proxy |
 | `/wayback-search` | How a competitor's messaging, pricing, or ICP has evolved over time |
 
+### Optional: Investing & financial research skills
+Use when the query is about a stock, ETF, fund, sector, macro variable, or any investing/portfolio decision. Apply the investing routing logic below to decide which subset to run. Always run these in parallel with the core skills.
+
+| Skill | Use when |
+|---|---|
+| `/sec-search` | Company filings, earnings, insider transactions — primary EDGAR data |
+| `/finviz-search` | Stock screener data: valuation ratios, short interest, earnings dates |
+| `/macrotrends-search` | 20+ year historical financials: margins, FCF, ROIC trends |
+| `/seekingalpha-search` | Investor thesis writing, earnings reactions, dividend analysis |
+| `/fred-search` | Fed macro data: CPI, yield curve, money supply, unemployment |
+| `/stocktwits-search` | Real-time retail sentiment on specific tickers |
+| `/benzinga-search` | Breaking news, analyst upgrades/downgrades, options flow |
+| `/bogleheads-search` | Long-term passive investing community, fund/ETF debates |
+| `/valueinvestorsclub-search` | Deep fundamental write-ups from professional value investors |
+| `/substack-search` | Independent analyst newsletters — macro, quant, sector research |
+| `/cme-fedwatch-search` | Market-implied Fed rate probabilities, rate hike/cut expectations |
+| `/worldbank-search` | Country GDP, inflation, trade — for international/EM investing |
+
 ### Product research routing — which question maps to which skill
 
 When a research question is about a product, market, or industry, use this routing to decide which optional skills to include:
@@ -51,6 +69,23 @@ When a research question is about a product, market, or industry, use this routi
 | What is the market narrative / what do analysts say? | `/web-search`, `/news-search`, `/hackernews-search` |
 | Is this a B2C physical product? | `/amazon-reviews`, `/appstore-search`, `/reddit-search` |
 | Is this a B2B SaaS product? | `/g2-search`, `/producthunt-search`, `/crunchbase-search`, `/glassdoor-search` |
+
+### Investing research routing — which question maps to which skill
+
+When a research question is about a stock, ETF, fund, sector, macro variable, or investing decision, use this routing to decide which optional skills to include:
+
+| Research question | Skills to prioritize |
+|---|---|
+| Is this company financially healthy? | `/sec-search`, `/macrotrends-search`, `/finviz-search` |
+| What's the analyst / Wall Street view? | `/benzinga-search`, `/seekingalpha-search`, `/news-search` |
+| What's the macro backdrop? | `/fred-search`, `/cme-fedwatch-search`, `/news-search` |
+| What's retail sentiment right now? | `/stocktwits-search`, `/reddit-search` (scope to r/investing, r/wallstreetbets) |
+| Long-term passive / ETF research? | `/bogleheads-search`, `/macrotrends-search`, `/finviz-search` |
+| Deep value / fundamental thesis? | `/valueinvestorsclub-search`, `/sec-search`, `/seekingalpha-search` |
+| International or emerging-market angle? | `/worldbank-search`, `/fred-search`, `/news-search` |
+| Independent / contrarian analyst views? | `/substack-search`, `/seekingalpha-search`, `/valueinvestorsclub-search` |
+| Recent catalyst / breaking corporate news? | `/benzinga-search`, `/news-search`, `/sec-search` (8-K) |
+| What are insiders doing? | `/sec-search` (Form 4), `/finviz-search` |
 
 ## Dynamic Skill Creation
 
