@@ -16,3 +16,9 @@
 
 # Claude Code local state
 .claude/todos/
+
+# Research output (local only)
+results/*
+!results/.gitkeep
+logs/*
+!logs/.gitkeep

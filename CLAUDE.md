@@ -152,7 +152,7 @@ User asks: *"search Quora for opinions on standing desks"*
 
 ## Output Format
 
-Distill everything into a single structured report:
+Distill everything into a single structured report with the following sections:
 
 - **Skills Used** — list every command that was invoked for this query (e.g. `web-search`, `reddit-search`, `youtube-search`, `crunchbase-search`). If a skill was skipped or returned no results, note it here too (e.g. `arxiv-search — skipped (not relevant)` or `news-search — no results`).
 - **Key Findings** — the most important takeaways, synthesized across all sources
@@ -160,3 +160,92 @@ Distill everything into a single structured report:
 - **Consensus vs. Debate** — where sources agree, and where they conflict or contradict
 - **Sources** — all URLs consulted, with the skill that produced each one noted inline. Format: `[Title](URL) — web-search` or `[Title](URL) — reddit-search`. Group by skill.
 - **Reliability Ranking** — rank sources from most to least reliable/relevant, with a brief reason
+
+## Report File Output
+
+After composing the report, **always save it as a Markdown file** in the `results/` directory:
+
+1. **Filename** — derive from the query: lowercase, hyphenated, max 50 chars, with `.md` extension. Examples:
+   - "best mechanical keyboards under $150" → `results/best-mechanical-keyboards-under-150.md`
+   - "Should I buy NVDA?" → `results/should-i-buy-nvda.md`
+   - "competitive landscape for AI writing tools" → `results/competitive-landscape-ai-writing-tools.md`
+
+2. **File content** — the complete report including a YAML front-matter block:
+   ```markdown
+   ---
+   query: "<the user's original question>"
+   date: "<YYYY-MM-DD>"
+   skills_used: [list, of, skills]
+   ---
+
+   # <Report Title>
+
+   <full report content>
+   ```
+
+3. **Announce the file** — after saving, tell the user: `Report saved to results/<filename>.md`
+
+4. The `results/` directory is gitignored (contents only) so reports stay local and won't be committed.
+
+## PDF Export
+
+After saving a report, **automatically generate the PDF** using the Python virtual environment configured in `.env`:
+
+```bash
+source .env && source "$VIRTUAL_ENV/bin/activate" && python3 scripts/md_to_pdf.py "results/<filename>.md"
+```
+
+The PDF is saved alongside the Markdown file with the same name and `.pdf` extension.
+
+The user can also manually trigger: `/export-pdf <filename>` or `/export-pdf all`.
+
+## Run Logging
+
+Log every research run to `logs/`. One YAML file per run, named to match the report: `logs/<report-name>.yaml`.
+
+### When to log
+
+1. **Start** — immediately when the research query is received, before launching any skills. Run `date -u +%Y-%m-%dT%H:%M:%SZ` to capture the start timestamp.
+2. **Each skill** — after each skill completes (or fails/is skipped), record its entry. Run `date -u +%Y-%m-%dT%H:%M:%SZ` for each timestamp.
+3. **End** — after the report is written. Run `date -u +%Y-%m-%dT%H:%M:%SZ` for the end timestamp.
+4. **Errors** — log any errors encountered (blocked sources, fetch failures, empty results) with the skill name and error description.
+
+### Log format
+
+```yaml
+query: "<the user's original question>"
+start_time: "2026-05-03T14:30:00Z"
+end_time: "2026-05-03T14:32:45Z"
+duration_seconds: 165
+report_file: "results/<filename>.md"
+steps:
+  - skill: web-search
+    timestamp: "2026-05-03T14:30:02Z"
+    status: success          # success | no_results | skipped | error
+    sources_fetched: 4
+  - skill: reddit-search
+    timestamp: "2026-05-03T14:30:03Z"
+    status: success
+    sources_fetched: 3
+  - skill: arxiv-search
+    timestamp: "2026-05-03T14:30:03Z"
+    status: skipped
+    reason: "not relevant to query"
+  - skill: synthesis
+    timestamp: "2026-05-03T14:31:50Z"
+    status: success
+  - skill: report-written
+    timestamp: "2026-05-03T14:32:45Z"
+    status: success
+errors: []
+# errors example:
+# - skill: news-search
+#   timestamp: "2026-05-03T14:30:10Z"
+#   error: "all sources returned 403"
+```
+
+### Rules
+- Timestamps must come from `date -u +%Y-%m-%dT%H:%M:%SZ` (not estimated).
+- Write the log file **after** the report is saved — collect entries in memory during the run, then write once at the end.
+- `duration_seconds` is computed from `start_time` and `end_time`.
+- Do not log the report content — just metadata.

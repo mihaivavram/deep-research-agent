@@ -1,12 +1,28 @@
 # Deep Research Agent
 
-A Claude Code research agent that searches up to 34 sources in parallel and 
-distills everything into a structured, ranked report. Runs on `claude-opus-4-6` 
-for best research quality.
+A Claude Code research agent that searches many web sources in parallel and 
+distills everything into a structured, ranked report (Markdown and PDF). 
+Runs on the best and latest Claude model available and logs each run.
 
 ## Requirements
 
 - Claude Code
+- Python 3.10+ (for PDF export)
+- System libraries for WeasyPrint (macOS: `brew install pango glib`; 
+  Linux: `apt install libpango-1.0-0 libglib2.0-0`)
+
+### Python setup
+
+Create a virtual environment and install dependencies:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Or use an existing Python environment — just make sure the packages 
+in `requirements.txt` are installed.
 
 ## Usage
 
@@ -24,6 +40,10 @@ What are the best mechanical keyboards under $150?
 
 The agent automatically selects which sources to search, runs them all in 
 parallel, and returns a synthesized report.
+
+> **Tip:** Prefix your query with `ultrathink` for deeper reasoning and 
+> synthesis across sources. Best for complex queries where you want richer 
+> analysis, not just aggregation.
 
 ### Targeting specific sources
 
@@ -121,6 +141,19 @@ The agent will announce: `Created new skill: /quora-search — Quora questions a
 | `/substack-search <query>` | Independent analyst newsletters — macro, quant, sector deep work |
 | `/cme-fedwatch-search <query>` | Market-implied probabilities for upcoming FOMC rate decisions |
 | `/worldbank-search <query>` | Country GDP, inflation, debt, demographics — international/EM angles |
+
+### PDF export
+
+| Command | What it does |
+|---|---|
+| `/export-pdf <filename>` | Convert a specific report in `results/` to a styled PDF |
+| `/export-pdf all` | Convert all reports in `results/` to PDF |
+
+### Run logs
+
+Every research run is logged to `logs/<report-name>.yaml` with start/end 
+timestamps, per-skill status and timing, and any errors. Logs are local 
+only (gitignored).
 
 ### Dynamic skills — created on demand
 
