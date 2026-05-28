@@ -102,16 +102,16 @@ When a research question is about a stock, ETF, fund, sector, macro variable, or
 
 ## Dynamic Skill Creation
 
-If the user names a source or platform that has no existing command in `.claude/commands/`, **write the command file first, then run it**. The file persists for all future sessions — the agent grows over time.
+If the user names a source or platform that has no existing strategy file in `sources/`, **write the strategy file first, then run it**. The file persists for all future sessions — the agent grows over time.
 
 ### When to trigger
-- User explicitly names a source with no existing command (e.g. "search Yelp", "check Quora", "look on Substack")
+- User explicitly names a source with no existing strategy file (e.g. "search Yelp", "check Quora", "look on Substack")
 - User asks to search a specific site, platform, or data source you don't have a skill for
 - Do NOT trigger for vague requests — only when a specific named source is identified
 
 ### How to build the command
 
-1. **Name the file** — lowercase, hyphenated: `[source-name]-search.md` (e.g. `yelp-search.md`, `quora-search.md`, `substack-search.md`). Place it in `.claude/commands/`.
+1. **Name the file** — lowercase, hyphenated: `[source-name]-search.md` (e.g. `yelp-search.md`, `quora-search.md`, `substack-search.md`). Place it in `sources/` and create a symlink in `.claude/commands/`: `ln -s "../../sources/[name].md" ".claude/commands/[name].md"`.
 
 2. **Before writing**, if you're unsure of the source's URL structure or search interface, run a quick WebSearch to discover it first.
 
@@ -139,9 +139,10 @@ If the user names a source or platform that has no existing command in `.claude/
 ### Example
 
 User asks: *"search Quora for opinions on standing desks"*
-→ Write `.claude/commands/quora-search.md` with Quora-specific search strategy
+→ Write `sources/quora-search.md` with Quora-specific search strategy
+→ Symlink to `.claude/commands/quora-search.md`
 → Execute the search for "standing desks"
-→ Report: `Created new skill: /quora-search — Quora questions and answers`
+→ Report: `Created new source: /quora-search — Quora questions and answers`
 
 ## Execution Rules
 
