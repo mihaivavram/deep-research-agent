@@ -200,6 +200,20 @@ The PDF is saved alongside the Markdown file with the same name and `.pdf` exten
 
 The user can also manually trigger: `/export-pdf <filename>` or `/export-pdf all`.
 
+## Email Delivery (Opt-in)
+
+**Only send an email if the user explicitly requests it** in their query — e.g. "email me the results", "send me the report", "and email it to me". If the user does not mention email, skip this step entirely.
+
+When email is requested, run after PDF generation:
+
+```bash
+python3 scripts/send_email.py "results/<filename>.md"
+```
+
+The script reads SMTP credentials from `.env` (`SMTP_SERVER`, `SMTP_PORT`, `SENDER_EMAIL`, `SENDER_PASSWORD`, `RECIPIENT_EMAIL`) and attaches both the `.md` and `.pdf` files. If the PDF doesn't exist, it sends only the Markdown.
+
+If the email fails, log the error but do not block — still announce the report as saved.
+
 ## Run Logging
 
 Log every research run to `logs/`. One YAML file per run, named to match the report: `logs/<report-name>.yaml`.
@@ -237,6 +251,9 @@ steps:
     status: success
   - skill: report-written
     timestamp: "2026-05-03T14:32:45Z"
+    status: success
+  - skill: email-sent
+    timestamp: "2026-05-03T14:32:50Z"
     status: success
 errors: []
 # errors example:

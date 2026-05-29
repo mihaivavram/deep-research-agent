@@ -57,6 +57,12 @@ Synthesize into a single report:
    ```
 4. Tell the user: `Report saved to results/<filename>.md`
 
+5. **Email (opt-in only)** — only if the user explicitly asks for email delivery (e.g. "email me the results", "send me the report"):
+   ```bash
+   python3 ~/.agents/skills/deep-research-agent/scripts/send_email.py "results/<filename>.md"
+   ```
+   The script reads SMTP credentials (`SMTP_SERVER`, `SMTP_PORT`, `SENDER_EMAIL`, `SENDER_PASSWORD`, `RECIPIENT_EMAIL`) from the project `.env`. It attaches both the `.md` and `.pdf` files. If the email fails, log the error but don't block. If the user does not mention email, skip this step entirely.
+
 ## Logging
 
 Capture timestamps with `date -u +%Y-%m-%dT%H:%M:%SZ`. Create `logs/` if needed. Write `logs/<report-name>.yaml` after the report is saved:

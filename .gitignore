@@ -14,6 +14,11 @@
 .env.local
 .env.*
 
+# Python
+venv/
+__pycache__/
+*.pyc
+
 # Claude Code local state
 .claude/todos/
 
