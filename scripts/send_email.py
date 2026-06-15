@@ -11,6 +11,7 @@ import sys
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import Optional
 from pathlib import Path
 
 
@@ -34,7 +35,7 @@ def attach_file(msg: MIMEMultipart, file_path: Path) -> None:
     msg.attach(part)
 
 
-def send_report(md_path: str, pdf_path: str | None = None) -> None:
+def send_report(md_path: str, pdf_path: Optional[str] = None) -> None:
     project_root = Path(__file__).resolve().parent.parent
     load_env(project_root / ".env")
 
