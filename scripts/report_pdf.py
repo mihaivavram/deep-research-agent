@@ -278,39 +278,77 @@ class ReportPDF(FPDF):
         self.l_margin = saved
         self.ln(1)
 
+    def _calc_cell_height(self, text, col_width, line_h):
+        """Calculate the height needed for wrapped text in a cell."""
+        usable = col_width - 3  # 1.5mm padding each side
+        if not text or usable <= 0:
+            return line_h
+        words = text.split(" ")
+        lines = 1
+        current_line = ""
+        for word in words:
+            test = f"{current_line} {word}".strip()
+            if self.get_string_width(test) > usable:
+                if current_line:
+                    lines += 1
+                    current_line = word
+                else:
+                    current_line = word
+            else:
+                current_line = test
+        return max(lines * line_h, line_h)
+
     def add_table(self, headers, rows):
         if not headers:
             return
         ncols = len(headers)
         W = self.w - self.l_margin - self.r_margin
-        rh = 7  # row height
+        line_h = 5  # single line height within cells
 
-        # Column widths proportional to max content length
-        lens = []
+        # Column widths: ensure each column fits its widest word, then
+        # distribute remaining space proportionally to content length.
+        self.set_font(self._sans, "", self.SMALL_PT)
+        padding = 3  # 1.5mm each side
+        min_widths = []
+        content_lens = []
         for ci in range(ncols):
-            col_max = len(headers[ci])
+            widest_word_w = self.get_string_width(headers[ci])
+            col_max_len = len(headers[ci])
             for row in rows:
-                if ci < len(row):
-                    col_max = max(col_max, len(str(row[ci])))
-            lens.append(max(col_max, 3))
-        total = sum(lens)
-        widths = [W * (l / total) for l in lens]
-        # Enforce minimum 12 mm
-        widths = [max(w, 12) for w in widths]
-        scale = W / sum(widths)
-        widths = [w * scale for w in widths]
+                val = str(row[ci]) if ci < len(row) else ""
+                col_max_len = max(col_max_len, len(val))
+                for word in val.split(" "):
+                    widest_word_w = max(widest_word_w, self.get_string_width(word))
+            min_widths.append(widest_word_w + padding + 1)
+            content_lens.append(max(col_max_len, 3))
+
+        total_min = sum(min_widths)
+        if total_min >= W:
+            scale = W / total_min
+            widths = [mw * scale for mw in min_widths]
+        else:
+            remaining = W - total_min
+            total_lens = sum(content_lens)
+            widths = [
+                mw + remaining * (cl / total_lens)
+                for mw, cl in zip(min_widths, content_lens)
+            ]
 
         def _render_header():
             self.set_font(self._sans, "B", self.SMALL_PT)
             self.set_fill_color(*self.NAVY)
             self.set_text_color(*self.WHITE)
             self.set_draw_color(*self.NAVY)
+            x0 = self.get_x()
+            y0 = self.get_y()
+            row_h = line_h + 2
             for ci, h in enumerate(headers):
-                self.cell(
-                    widths[ci], rh, " " + self._s(h),
-                    border=1, fill=True, new_x="RIGHT", new_y="TOP",
-                )
-            self.ln(rh)
+                x = x0 + sum(widths[:ci])
+                self.rect(x, y0, widths[ci], row_h, "DF")
+                self.set_xy(x + 1.5, y0 + 1)
+                self.cell(widths[ci] - 3, line_h, self._s(h),
+                          new_x="RIGHT", new_y="TOP")
+            self.set_xy(x0, y0 + row_h)
             self.set_text_color(*self.DARK)
 
         _render_header()
@@ -319,27 +357,44 @@ class ReportPDF(FPDF):
         self.set_font(self._sans, "", self.SMALL_PT)
         self.set_draw_color(*self.BORDER)
         for ri, row in enumerate(rows):
+            # Calculate row height based on tallest cell
+            cells = []
+            for ci in range(ncols):
+                val = self._s(str(row[ci])) if ci < len(row) else ""
+                cells.append(val)
+            self.set_font(self._sans, "", self.SMALL_PT)
+            row_h = line_h + 2  # minimum row height
+            for ci, val in enumerate(cells):
+                ch = self._calc_cell_height(val, widths[ci], line_h) + 2
+                row_h = max(row_h, ch)
+
             # Page break with repeated header
-            if self.get_y() + rh > self.h - self.b_margin:
+            if self.get_y() + row_h > self.h - self.b_margin:
                 self.add_page()
                 _render_header()
                 self.set_font(self._sans, "", self.SMALL_PT)
                 self.set_draw_color(*self.BORDER)
 
-            self.set_fill_color(*(self.LIGHT if ri % 2 else self.WHITE))
+            x0 = self.get_x()
+            y0 = self.get_y()
+            fill_color = self.LIGHT if ri % 2 else self.WHITE
+            self.set_fill_color(*fill_color)
             self.set_text_color(*self.DARK)
-            for ci in range(ncols):
-                val = self._s(str(row[ci])) if ci < len(row) else ""
-                max_w = widths[ci] - 3
-                if self.get_string_width(val) > max_w:
-                    while len(val) > 1 and self.get_string_width(val + "..") > max_w:
-                        val = val[:-1]
-                    val += ".."
-                self.cell(
-                    widths[ci], rh, " " + val,
-                    border=1, fill=True, new_x="RIGHT", new_y="TOP",
-                )
-            self.ln(rh)
+
+            for ci, val in enumerate(cells):
+                x = x0 + sum(widths[:ci])
+                # Draw cell background and border
+                self.set_fill_color(*fill_color)
+                self.set_draw_color(*self.BORDER)
+                self.rect(x, y0, widths[ci], row_h, "DF")
+                # Write wrapped text
+                self.set_xy(x + 1.5, y0 + 1)
+                saved_margin = self.l_margin
+                self.l_margin = x + 1.5
+                self.multi_cell(widths[ci] - 3, line_h, val)
+                self.l_margin = saved_margin
+
+            self.set_xy(x0, y0 + row_h)
         self.ln(4)
         self.set_text_color(*self.DARK)
 
