@@ -144,23 +144,96 @@ User asks: *"search Quora for opinions on standing desks"*
 → Execute the search for "standing desks"
 → Report: `Created new source: /quora-search — Quora questions and answers`
 
+## Query Analysis & Decomposition
+
+Before launching any searches, spend 10 seconds analyzing the query:
+
+### 1. Classify the query type
+Identify which category best fits — this drives source selection and depth:
+- **Factual lookup** — definitions, dates, entity identification → 2-3 sources, short-circuit fast
+- **Opinion survey** — "what do people think about X" → prioritize community sources (Reddit, HN, Blind, Quora)
+- **Product comparison** — "best X for Y" → prioritize review sources (Amazon, G2, Reddit, YouTube)
+- **Market analysis** — competitive landscape, industry trends → wide source spread (Crunchbase, Trends, G2, news, HN)
+- **Investment thesis** — stock/ETF/macro analysis → financial sources (SEC, Finviz, Macrotrends, FRED, Benzinga)
+- **How-to / tutorial** — "how do I X" → prioritize YouTube, GitHub, web, Stack Overflow
+- **Troubleshooting** — "why does X happen" → prioritize Reddit, HN, GitHub issues, forums
+- **Creative / recommendation** — "suggest X like Y" → prioritize community + review sources
+
+### 2. Decompose complex queries
+Break multi-faceted queries into 2-4 sub-questions, each mapped to different source clusters. Example:
+- "Should I invest in NVDA given the macro environment?" decomposes into:
+  - Financial health → sec-search, macrotrends-search, finviz-search
+  - Macro context → fred-search, cme-fedwatch-search, news-search
+  - Analyst sentiment → seekingalpha-search, benzinga-search
+  - Retail/community sentiment → stocktwits-search, reddit-search
+
+### 3. Reformulate queries per source
+Each source type works best with different phrasing:
+- **Community sources** (Reddit, HN, Blind): use colloquial language ("is NVDA overpriced right now?", "best standing desk that won't wobble")
+- **Financial databases** (SEC, FRED, Finviz): use formal terms, ticker symbols, series names ("NVIDIA Corporation 10-Q gross margin", "DGS10 yield curve")
+- **Academic sources** (arXiv, PubMed): use technical terminology, method names, field-specific jargon
+- **Review sources** (G2, Amazon): use product names and feature-specific terms ("ergonomic keyboard wrist pain")
+
+## Universal Fallback Strategies
+
+These rules apply to ALL sources. When WebFetch on any URL returns a failure:
+
+| HTTP Status | Meaning | Action |
+|---|---|---|
+| **403** | Access denied | Do NOT retry. Go to fallback chain. |
+| **429** | Rate limited | Wait 3 seconds, retry once. If still 429, go to fallback chain. |
+| **451** | Legal block | Do NOT retry. Go to fallback chain. |
+| **Timeout** | Server slow | Retry once. If still timeout, go to fallback chain. |
+| **Empty/nav-only** | Content gated | Go to fallback chain. |
+
+**Fallback chain (in order):**
+1. **Google cache:** WebSearch for `cache:BLOCKED_URL` — often returns a readable snapshot
+2. **Wayback Machine:** WebFetch `https://web.archive.org/web/*/BLOCKED_URL` — works for any previously-crawled page
+3. **archive.ph:** WebFetch `https://archive.ph/newest/BLOCKED_URL` — community archive, good for news and social media
+4. **Google snippet extraction:** Extract maximum signal from the search result snippet that led you to the URL — title, description, and preview text. Flag as "snippet-sourced."
+
+**Critical rule:** NEVER report "no results" for a source if Google search snippets contained relevant content from that source. Always extract and use snippet-level data as a last resort, and flag the extraction level in your output.
+
 ## Execution Rules
 
 - **Run all applicable skills in parallel simultaneously** — do not wait for one to finish before starting the next. Launch all skill invocations at once.
 - Fetch **3–5 sources per skill** minimum. Don't rely on search snippets — use WebFetch to read full page content.
-- If a source returns no results or is blocked, skip it silently and continue.
+- If a source returns no results or is blocked, apply the Universal Fallback Strategies above before moving on.
 - If the user asks a follow-up question, re-run only the skills relevant to the new angle — do not repeat the full search.
+
+## Gap Detection & Follow-Up (Multi-Pass)
+
+After all parallel skills complete but BEFORE writing the report, evaluate coverage:
+
+1. **Source category check:** Did any critical source category for this query type return zero usable results? (e.g., product query with no user reviews, investment query with no financial data). If yes, run 1-2 targeted WebSearch queries to compensate — these are not full skill runs, just specific gap-filling searches.
+
+2. **Temporal gap check:** Are all key sources older than 6 months on a time-sensitive topic? If yes, run a recency-targeted WebSearch: `$ARGUMENTS 2026 latest`.
+
+3. **Perspective gap check:** Do all sources agree on everything for a debatable topic? If yes, actively search for the contrarian view: `$ARGUMENTS criticism OR problems OR downsides OR overrated`.
+
+4. **Contradiction tiebreaker:** Are there unresolved contradictions between sources? If yes, search for a primary or authoritative source that can resolve the conflict (official data, government report, peer-reviewed study).
+
+This adds 30-60 seconds but dramatically improves coverage when sources fail. Skip gap detection only for simple factual lookups.
 
 ## Output Format
 
 Distill everything into a single structured report with the following sections:
 
-- **Skills Used** — list every command that was invoked for this query (e.g. `web-search`, `reddit-search`, `youtube-search`, `crunchbase-search`). If a skill was skipped or returned no results, note it here too (e.g. `arxiv-search — skipped (not relevant)` or `news-search — no results`).
-- **Key Findings** — the most important takeaways, synthesized across all sources
+- **Skills Used** — list every command that was invoked for this query (e.g. `web-search`, `reddit-search`, `youtube-search`, `crunchbase-search`). If a skill was skipped or returned no results, note it here too (e.g. `arxiv-search — skipped (not relevant)` or `news-search — no results`). Note any gap-detection follow-up searches that were triggered.
+- **Key Findings** — the most important takeaways, synthesized across all sources. Every factual claim, data point, or statistic must have an inline citation: `[Source Title](URL)`. Opinions and sentiment claims must cite the platform and specific thread: `[Reddit r/investing](URL)`. When a finding is synthesized from multiple sources, cite all of them.
 - **By Source** — what each source (web / Reddit / YouTube / etc.) distinctly contributed
 - **Consensus vs. Debate** — where sources agree, and where they conflict or contradict
 - **Sources** — all URLs consulted, with the skill that produced each one noted inline. Format: `[Title](URL) — web-search` or `[Title](URL) — reddit-search`. Group by skill.
 - **Reliability Ranking** — rank sources from most to least reliable/relevant, with a brief reason
+
+### Cross-Source Validation Rules
+
+Apply these during synthesis:
+
+- **Convergence:** When the same claim appears in 3+ independent sources (including at least one primary source), note it as high-confidence. When a claim appears in only 1 source, flag it as "single-source — verify independently."
+- **Citation chains:** When multiple sources (a news article, a blog post, a YouTube video) all cite the same underlying study, report, or dataset, trace back to the primary source and cite that instead. Do not count derivative content as independent corroboration.
+- **Freshness:** In the Reliability Ranking, note the publication date of each source. Flag any source older than 6 months on time-sensitive topics as potentially outdated.
+- **Bias signals:** For product research, flag sources with likely affiliate links or sponsored content. For financial research, note when an analyst has a disclosed position. For community sources, note platform-specific biases (e.g., Reddit skews Western/tech, HN skews anti-enterprise, Blind skews tech-company employees).
 
 ## Report File Output
 
