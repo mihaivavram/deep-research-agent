@@ -17,13 +17,40 @@ Given a query via `$ARGUMENTS`, immediately start all searches — do not ask fo
 2. **Conditionally run**: Read [REFERENCE.md](REFERENCE.md) to determine which additional sources match the query's domain
 3. **Source strategies**: For each selected source, read its strategy file from `~/.agents/skills/deep-research-agent/sources/<source-name>.md` and follow the search instructions there using WebSearch and WebFetch directly
 
-## Execution
+## Execution pipeline
 
+### 1. Query analysis
+Classify the query type (factual, opinion, product, market, investment, how-to, troubleshooting, recommendation). Decompose complex queries into 2-4 sub-questions. Reformulate queries per source type (colloquial for Reddit, formal for SEC, technical for arXiv).
+
+### 2. Research plan
+Emit a brief plan (query type, sub-questions, sources selected, depth tier, triage threshold). Do not wait for confirmation — start execution immediately after.
+
+### 3. Depth budgeting
+
+| Tier | When | Sources | Page fetches |
+|---|---|---|---|
+| Quick | Simple factual lookup | 2-3 | 5-8 |
+| Standard | Product comparison, opinion survey, how-to | 4-6 | 15-25 |
+| Deep | Market analysis, investment thesis, or user says "deep dive" | 8-15 | 30-50 |
+
+### 4. Adaptive source health
+Read `sources/SOURCE-HEALTH.md`. Demote sources with 3+/5 recent failures (compensate with `site:` scoped web-search). Prioritize sources with 5/5 recent success.
+
+### 5. Parallel execution
 - Run all source searches **in parallel** — launch all at once
 - For each source: follow the strategy in its `.md` file, using WebSearch and WebFetch directly
 - Fetch **3–5 full pages per source** minimum — don't rely on search snippets
-- Skip sources that return no results or are blocked — continue silently
+- On failure: follow universal fallback chain (Google cache → Wayback → archive.ph → snippet extraction)
 - For follow-up questions, re-run only relevant sources
+
+### 6. Source triage
+After fetching, score each page on relevance (0-3) + authority (0-3) + recency (0-3). Read `sources/triage-config.yaml` for thresholds. Drop pages below the tier threshold. If fewer than minimum pages survive per sub-question, re-query with reformulated terms (max 2 rounds). Triaged-out pages are listed in Sources section with `[triaged out — score X/9]`.
+
+### 7. Gap detection
+Check for: missing source categories, temporal staleness, missing contrarian views, unresolved contradictions. Run 1-2 targeted follow-up searches to fill gaps.
+
+### 8. Progress reporting
+Emit one-line updates after each stage completes (source fetches, triage stats, gap detection results).
 
 ## Dynamic source creation
 
@@ -34,11 +61,12 @@ If the user names a source with no existing strategy file in `sources/`, write a
 Synthesize into a single report:
 
 - **Skills Used** — every source searched, with status (success / skipped / no results)
-- **Key Findings** — top takeaways synthesized across all sources
+- **Key Findings** — top takeaways synthesized across all sources, each prefixed with confidence level (High / Medium / Low / Unverified)
 - **By Source** — what each source distinctly contributed
 - **Consensus vs. Debate** — where sources agree and where they conflict
-- **Sources** — all URLs consulted, grouped by source
-- **Reliability Ranking** — sources ranked most to least reliable with brief reason
+- **Sources** — all URLs consulted, grouped by source. Triaged-out pages marked with score
+- **Reliability Ranking** — sources ranked most to least reliable with brief reason, publication date, and bias signals
+- **Research Quality Score** — self-assessed 1-5 based on coverage, source diversity, claim backing, contradiction resolution, staleness
 
 ## Saving the report
 
@@ -65,18 +93,85 @@ Synthesize into a single report:
 
 ## Logging
 
-Capture timestamps with `date -u +%Y-%m-%dT%H:%M:%SZ`. Create `logs/` if needed. Write `logs/<report-name>.yaml` after the report is saved:
+Capture timestamps with `date -u +%Y-%m-%dT%H:%M:%SZ`. Create `logs/` if needed. Write `logs/<report-name>.yaml` after the report is saved.
+
+All fields shown below are REQUIRED — write `0`, `0.0`, `null`, or `"n/a"` if not applicable. Never omit fields.
+
+### Top-level fields
 
 ```yaml
 query: "<question>"
+query_type: "product_comparison"       # factual | opinion | product | market | investment | how_to | troubleshooting | recommendation
+depth_tier: "standard"                 # quick | standard | deep
 start_time: "<ISO>"
 end_time: "<ISO>"
 duration_seconds: <N>
 report_file: "results/<filename>.md"
+sources_selected: <N>
+sources_succeeded: <N>                 # status success or partial
+sources_failed: <N>                    # status no_results or error
+total_pages_fetched: <N>
+pages_fetch_succeeded: <N>
+pages_fetch_failed: <N>
+fetch_success_rate: <float>            # pages_fetch_succeeded / total_pages_fetched
+triage_threshold: <N>
+pages_passed_triage: <N>
+pages_dropped_triage: <N>
+triage_pass_rate: <float>
+requery_rounds: <N>
+requery_pages_fetched: <N>
+quality_score: <1-5>
+research_plan: "<summary string>"
+```
+
+### Step entries
+
+Every step MUST include `skill`, `timestamp`, `status`. Additional fields depend on status:
+
+```yaml
 steps:
   - skill: <source-name>
     timestamp: "<ISO>"
-    status: success|no_results|skipped|error
-    sources_fetched: <N>
-errors: []
+    status: success                    # success | partial | no_results | skipped | error
+    sources_fetched: <N>               # required for success/partial
+    queries_run: <N>                   # required for all source skills
+    fallback_used: <type>              # required for partial: google_cache | wayback | archive_ph | google_snippets | none
+    fallback_succeeded: <bool>         # required for partial
+    reason: "<why>"                    # required for partial | no_results | skipped | error
+  - skill: source-triage
+    timestamp: "<ISO>"
+    status: success
+    pages_scored: <N>
+    pages_passed: <N>
+    pages_dropped: <N>
+    triage_threshold: <N>
+    requery_rounds: <N>
+    requery_pages_fetched: <N>
+    requery_pages_passed: <N>
+  - skill: gap-detection
+    timestamp: "<ISO>"
+    status: success
+    gaps_found: <N>
+    followup_searches: <N>
+    reason: "<what gaps were found>"
 ```
+
+### Error entries
+
+Every error MUST include ALL structured fields — never log free-text only:
+
+```yaml
+errors:
+  - skill: <source-name>
+    timestamp: "<ISO>"
+    error_type: access_blocked         # access_blocked | rate_limited | timeout | empty_content | parse_error | redirect_error | server_error | login_required
+    http_status: 403                   # actual HTTP status, or null
+    url: "<the specific URL that failed>"  # or null for skill-level errors
+    fallback_used: google_snippets     # google_cache | wayback | archive_ph | google_snippets | none
+    fallback_succeeded: true
+    error: "<human-readable description>"
+```
+
+Log individual page failures, not just skill-level summaries. If 3 URLs returned 403, log 3 separate error entries with specific URLs.
+
+After writing the log, update `sources/SOURCE-HEALTH.md` with success/failure status from this run.

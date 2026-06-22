@@ -95,3 +95,48 @@ Use when the query is about a stock, ETF, fund, sector, macro variable, or inves
 | Independent / contrarian analyst views? | `substack-search`, `seekingalpha-search`, `valueinvestorsclub-search` |
 | Recent catalyst / breaking corporate news? | `benzinga-search`, `news-search`, `sec-search`, `twitter-search` |
 | What are insiders doing? | `sec-search`, `finviz-search` |
+
+---
+
+## Query type classification
+
+The agent classifies each query before selecting sources:
+
+| Type | Description | Typical depth |
+|---|---|---|
+| Factual lookup | Definitions, dates, entity identification | Quick |
+| Opinion survey | "What do people think about X" | Standard |
+| Product comparison | "Best X for Y" | Standard |
+| Market analysis | Competitive landscape, industry trends | Deep |
+| Investment thesis | Stock/ETF/macro analysis | Deep |
+| How-to / tutorial | "How do I X" | Standard |
+| Troubleshooting | "Why does X happen" | Standard |
+| Recommendation | "Suggest X like Y" | Standard |
+
+---
+
+## Quality pipeline stages
+
+Each research run passes through these stages in order:
+
+1. **Query analysis** — classify type, decompose sub-questions, reformulate per source
+2. **Source selection** — pick skills based on query type + routing tables above
+3. **Adaptive health check** — read `sources/SOURCE-HEALTH.md`, demote unreliable sources
+4. **Depth budgeting** — set tier (Quick/Standard/Deep) and page fetch limits
+5. **Parallel execution** — run all source skills simultaneously with fallback chains
+6. **Source triage** — score each page (relevance + authority + recency), drop weak pages, re-query if needed
+7. **Gap detection** — check for category, temporal, perspective, and contradiction gaps
+8. **Cross-source validation** — trace citation chains, flag bias signals, check freshness
+9. **Synthesis** — write report with confidence-scored findings and quality self-assessment
+
+### Source triage quick reference
+
+Configured in `sources/triage-config.yaml`. Each page scored 0-9 (three axes, 0-3 each).
+
+| Depth tier | Min score to pass | Min pages per sub-question | Re-query rounds |
+|---|---|---|---|
+| Quick | 5 | 2 | Up to 2 |
+| Standard | 4 | 3 | Up to 2 |
+| Deep | 3 | 4 | Up to 2 |
+
+Modifiers: snippet-only pages get −2 penalty; sources with 5/5 health get +1 bonus.

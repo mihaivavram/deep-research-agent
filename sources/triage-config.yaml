@@ -1,0 +1,47 @@
+# Source Triage Configuration
+# Controls how fetched pages are scored and filtered before synthesis.
+# Edit these values to tune triage strictness per depth tier.
+
+# Scoring axes — each page is scored 0-3 on each axis.
+# Max possible score = 9 (sum of all three axes).
+axes:
+  relevance:
+    weight: 1          # multiplier applied to this axis score
+    description: "How directly the page addresses the query or sub-question (0=unrelated, 1=tangential, 2=partially relevant, 3=directly answers)"
+  authority:
+    weight: 1
+    description: "Source credibility — primary data, official source, peer-reviewed, established outlet (0=anonymous/unknown, 1=forum/blog, 2=reputable outlet/named expert, 3=primary source/official data)"
+  recency:
+    weight: 1
+    description: "How current the content is relative to the topic's time-sensitivity (0=severely outdated, 1=older but still relevant, 2=reasonably current, 3=very recent or evergreen)"
+
+# Minimum score thresholds — pages scoring below are dropped from synthesis.
+# Score range: 0 to 9 (unweighted) or 0 to 9*max_weight (weighted).
+thresholds:
+  quick: 5             # stricter — only high-quality pages for fast answers
+  standard: 4          # balanced — default
+  deep: 3              # more permissive — cast a wide net, keep more signal
+
+# Re-query triggers — if fewer than this many pages survive triage
+# per sub-question, fire a targeted re-query.
+min_surviving_pages:
+  quick: 2
+  standard: 3
+  deep: 4
+
+# Maximum re-query rounds before accepting whatever survived.
+max_requery_rounds: 2
+
+# Re-query strategy — how to reformulate when re-querying.
+requery_strategies:
+  - "reformulate with synonyms and alternative phrasing"
+  - "narrow scope to most specific sub-question"
+  - "try alternate source (e.g., web-search if specialized source failed)"
+
+# Snippet-sourced pages get an automatic penalty.
+# This is subtracted from their total score before threshold comparison.
+snippet_penalty: 2
+
+# Pages from sources with high SOURCE-HEALTH.md success rate get a bonus.
+# Applied when source has 5/5 recent successes.
+healthy_source_bonus: 1

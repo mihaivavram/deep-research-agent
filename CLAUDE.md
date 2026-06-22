@@ -225,6 +225,7 @@ Example plan output:
 Research plan: Product comparison (Standard depth)
 - Sub-questions: (1) Which models exist? (2) What do users say? (3) What do experts recommend?
 - Sources: web-search, reddit-search, youtube-search, amazon-reviews, news-search [5 sources, ~20 fetches]
+- Triage: score ≥ 4/9 to pass, re-query if < 3 pages/sub-question
 - reddit-search demoted (2/5 recent success) — compensating with extra web-search query
 ```
 
@@ -249,6 +250,72 @@ After each source skill completes (or fails), emit a one-line progress update to
 
 This gives the user real-time visibility during 2-10 minute runs.
 
+## Source Triage (Per-Page Quality Gate)
+
+After each skill returns its fetched pages but BEFORE synthesis, score and filter individual pages. This prevents the model from confidently synthesizing noise. Read `sources/triage-config.yaml` for the active thresholds — all values below are defaults that can be overridden there.
+
+### Configuration
+
+All triage parameters live in `sources/triage-config.yaml`. Read this file at the start of each run alongside `SOURCE-HEALTH.md`. The config controls scoring weights, thresholds per depth tier, re-query triggers, and bonus/penalty modifiers. If the file is missing or unreadable, use the defaults documented below.
+
+### Scoring
+
+Score each fetched page on three axes (0–3 each, max total = 9):
+
+| Axis | 0 | 1 | 2 | 3 |
+|---|---|---|---|---|
+| **Relevance** | Unrelated to query | Tangentially related | Partially addresses a sub-question | Directly answers the query or sub-question |
+| **Authority** | Anonymous, unknown, or user-generated without credentials | Forum post, personal blog, unverified claim | Reputable outlet, named expert, established platform | Primary source: official data, filing, peer-reviewed, government report |
+| **Recency** | Severely outdated (2+ years on time-sensitive topic) | Older but still somewhat relevant | Reasonably current (within 12 months) | Very recent or topic is evergreen |
+
+**Modifiers** (applied after scoring):
+- **Snippet penalty:** Pages accessed only via snippet extraction (not full fetch) get −2 to their total score. Snippets carry less signal and no verification of context.
+- **Healthy source bonus:** Pages from sources with 5/5 recent success rate in `SOURCE-HEALTH.md` get +1. These sources have proven reliable and their content deserves slight preference.
+
+### Filtering
+
+Compare each page's modified total score against the threshold for the current depth tier:
+
+| Depth Tier | Minimum Score | Rationale |
+|---|---|---|
+| **Quick** | 5 | Stricter — only high-quality pages for fast answers |
+| **Standard** | 4 | Balanced default |
+| **Deep** | 3 | More permissive — cast a wide net, retain more signal |
+
+Pages scoring below the threshold are **dropped from synthesis** — they are still listed in the Sources section of the report (marked as `[triaged out — score X/9]`) so the user can see what was excluded, but their content is not used for Key Findings or Consensus vs. Debate.
+
+### Re-Query Trigger
+
+After filtering, check page survival per sub-question:
+
+| Depth Tier | Minimum surviving pages per sub-question |
+|---|---|
+| **Quick** | 2 |
+| **Standard** | 3 |
+| **Deep** | 4 |
+
+If any sub-question has fewer surviving pages than its tier minimum, trigger a targeted re-query:
+
+1. **Round 1:** Reformulate the query with synonyms and alternative phrasing. Target the same source type that underperformed.
+2. **Round 2:** If still below minimum, try an alternate source (e.g., `web-search` with `site:` scoping if the specialized source failed), or narrow scope to the most specific sub-question.
+3. **Stop after 2 rounds** (configurable via `max_requery_rounds` in config). Accept whatever survived — do not loop indefinitely.
+
+Re-queried pages go through the same scoring and filtering. They are not exempt.
+
+### Progress Reporting Update
+
+Include triage results in the progress output:
+```
+[5/7] source-triage: 18/23 pages passed (5 dropped, score < 4) ✓
+[6/7] re-query: 1 sub-question below minimum, 3 new pages fetched (2 passed) ⚠
+[7/7] gap-detection: 1 follow-up search triggered ✓
+```
+
+### What NOT to triage
+
+- **Snippet-sourced data** still enters triage (with the −2 penalty) rather than being auto-excluded. A high-authority snippet (e.g., a Google snippet from an SEC filing) can still clear the bar.
+- **Fallback-sourced pages** (Wayback, archive.ph, Google cache) are scored normally — the fallback method doesn't affect quality, only the content does.
+
 ## Gap Detection & Follow-Up (Multi-Pass)
 
 After all parallel skills complete but BEFORE writing the report, evaluate coverage:
@@ -271,7 +338,7 @@ Distill everything into a single structured report with the following sections:
 - **Key Findings** — the most important takeaways, synthesized across all sources. Every factual claim, data point, or statistic must have an inline citation: `[Source Title](URL)`. Opinions and sentiment claims must cite the platform and specific thread: `[Reddit r/investing](URL)`. When a finding is synthesized from multiple sources, cite all of them.
 - **By Source** — what each source (web / Reddit / YouTube / etc.) distinctly contributed
 - **Consensus vs. Debate** — where sources agree, and where they conflict or contradict
-- **Sources** — all URLs consulted, with the skill that produced each one noted inline. Format: `[Title](URL) — web-search` or `[Title](URL) — reddit-search`. Group by skill.
+- **Sources** — all URLs consulted, with the skill that produced each one noted inline. Format: `[Title](URL) — web-search` or `[Title](URL) — reddit-search`. Group by skill. Pages that were triaged out are listed at the end of their skill group with `[triaged out — score X/9]`.
 - **Reliability Ranking** — rank sources from most to least reliable/relevant, with a brief reason
 - **Research Quality Score** — a self-assessed 1-5 rating based on the quality gate checks below
 
@@ -381,68 +448,174 @@ Log every research run to `logs/`. One YAML file per run, named to match the rep
 1. **Start** — immediately when the research query is received, before launching any skills. Run `date -u +%Y-%m-%dT%H:%M:%SZ` to capture the start timestamp.
 2. **Each skill** — after each skill completes (or fails/is skipped), record its entry. Run `date -u +%Y-%m-%dT%H:%M:%SZ` for each timestamp.
 3. **End** — after the report is written. Run `date -u +%Y-%m-%dT%H:%M:%SZ` for the end timestamp.
-4. **Errors** — log any errors encountered (blocked sources, fetch failures, empty results) with the skill name and error description.
+4. **Errors** — log every error with full structured fields (see Required Error Fields below). Never log an error as free-text only.
 
-### Log format
+### Required top-level fields
+
+Every log file MUST include ALL of these fields. None are optional — if a value is zero or not applicable, write `0`, `0.0`, `null`, or `"n/a"` explicitly.
 
 ```yaml
 query: "<the user's original question>"
-query_type: "product_comparison"       # factual | opinion | product | market | investment | how_to | troubleshooting | recommendation
-depth_tier: "standard"                 # quick | standard | deep
-start_time: "2026-05-03T14:30:00Z"
-end_time: "2026-05-03T14:32:45Z"
-duration_seconds: 165
-report_file: "results/<filename>.md"
-sources_selected: 6
-sources_succeeded: 4
-total_pages_fetched: 23
-fetch_success_rate: 0.74
-quality_score: 4                       # 1-5 from Quality Gates
+query_type: "product_comparison"       # REQUIRED: factual | opinion | product | market | investment | how_to | troubleshooting | recommendation
+depth_tier: "standard"                 # REQUIRED: quick | standard | deep
+start_time: "2026-05-03T14:30:00Z"     # REQUIRED
+end_time: "2026-05-03T14:32:45Z"       # REQUIRED
+duration_seconds: 165                  # REQUIRED: computed from start_time and end_time
+report_file: "results/<filename>.md"   # REQUIRED
+sources_selected: 6                    # REQUIRED: total source skills launched
+sources_succeeded: 4                   # REQUIRED: skills with status success or partial
+sources_failed: 2                      # REQUIRED: skills with status no_results or error
+total_pages_fetched: 23                # REQUIRED: total pages WebFetch attempted
+pages_fetch_succeeded: 19             # REQUIRED: pages that returned usable content
+pages_fetch_failed: 4                  # REQUIRED: pages that returned errors (403, 429, timeout, empty)
+fetch_success_rate: 0.83               # REQUIRED: pages_fetch_succeeded / total_pages_fetched
+triage_threshold: 4                    # REQUIRED: from triage-config.yaml for the depth tier
+pages_passed_triage: 18                # REQUIRED: pages that scored above threshold
+pages_dropped_triage: 5                # REQUIRED: pages dropped (includes re-query pages that failed triage)
+triage_pass_rate: 0.78                 # REQUIRED: pages_passed_triage / (pages_passed_triage + pages_dropped_triage)
+requery_rounds: 1                      # REQUIRED: 0 if no re-query was needed
+requery_pages_fetched: 3               # REQUIRED: 0 if no re-query
+quality_score: 4                       # REQUIRED: 1-5 from Quality Gates
 research_plan: "Product comparison (Standard). Sub-questions: (1) Which models exist? (2) What do users say? (3) What do experts recommend?"
+```
+
+### Required step fields
+
+Every step entry MUST include `skill`, `timestamp`, and `status`. Additional fields depend on the step type.
+
+#### Source skill steps (web-search, reddit-search, etc.)
+
+```yaml
 steps:
+  # SUCCESS — all required fields present
   - skill: web-search
     timestamp: "2026-05-03T14:30:02Z"
-    status: success                    # success | partial | no_results | skipped | error
-    sources_fetched: 8
+    status: success                    # REQUIRED: success | partial | no_results | skipped | error
+    sources_fetched: 8                 # REQUIRED for success/partial: how many pages returned usable content
+    queries_run: 3                     # REQUIRED: how many WebSearch queries were executed
+
+  # PARTIAL — source returned some data but with failures
   - skill: reddit-search
     timestamp: "2026-05-03T14:30:03Z"
     status: partial
     sources_fetched: 0
+    queries_run: 3
+    fallback_used: google_snippets     # REQUIRED for partial: google_cache | wayback | archive_ph | google_snippets | none
+    fallback_succeeded: true           # REQUIRED for partial: did the fallback produce usable data?
+    reason: "direct fetch blocked (403); extracted 3 snippets via Google"  # REQUIRED for partial/no_results/error
+
+  # NO_RESULTS — source was attempted but returned nothing usable
+  - skill: twitter-search
+    timestamp: "2026-05-03T14:30:03Z"
+    status: no_results
+    sources_fetched: 0
+    queries_run: 2
     fallback_used: google_snippets
-    reason: "direct fetch blocked; extracted 3 snippets"
+    fallback_succeeded: false
+    reason: "X/Twitter gated behind login; site-search returned non-Twitter results; snippet extraction found 0 relevant snippets"
+
+  # SKIPPED — source was not attempted
   - skill: arxiv-search
     timestamp: "2026-05-03T14:30:03Z"
     status: skipped
-    reason: "not relevant to query"
+    reason: "not relevant to query type (product comparison)"
+
+  # ERROR — source encountered an unexpected failure
+  - skill: hackernews-search
+    timestamp: "2026-05-03T14:30:04Z"
+    status: error
+    sources_fetched: 0
+    queries_run: 1
+    reason: "Algolia API returned 500 Internal Server Error on all queries"
+```
+
+#### Pipeline steps (triage, gap-detection, synthesis, report, pdf, email)
+
+```yaml
+  - skill: source-triage
+    timestamp: "2026-05-03T14:31:25Z"
+    status: success
+    pages_scored: 23
+    pages_passed: 18
+    pages_dropped: 5
+    triage_threshold: 4
+    requery_rounds: 1
+    requery_pages_fetched: 3
+    requery_pages_passed: 2
+
   - skill: gap-detection
     timestamp: "2026-05-03T14:31:30Z"
-    status: success
-    reason: "triggered 2 follow-up searches for missing user reviews"
+    status: success                    # success | skipped (for Quick tier)
+    gaps_found: 2                      # REQUIRED: number of gaps identified
+    followup_searches: 2              # REQUIRED: number of follow-up searches triggered
+    reason: "missing user reviews (source category gap); no contrarian perspective found (perspective gap)"
+
   - skill: synthesis
     timestamp: "2026-05-03T14:31:50Z"
     status: success
+
   - skill: report-written
     timestamp: "2026-05-03T14:32:45Z"
     status: success
+
   - skill: pdf-generated
     timestamp: "2026-05-03T14:32:48Z"
-    status: success
+    status: success                    # success | error | skipped
+
   - skill: email-sent
     timestamp: "2026-05-03T14:32:50Z"
-    status: success
-errors:
-  - skill: reddit-search
-    timestamp: "2026-05-03T14:30:05Z"
-    error_type: access_blocked         # access_blocked | rate_limited | timeout | empty_results | parse_error
-    http_status: 403
-    fallback_used: google_snippets
-    error: "reddit.com blocked WebFetch; used Google snippets"
+    status: success                    # success | error | skipped (if not requested)
 ```
+
+### Required error fields
+
+Every entry in the `errors` list MUST include ALL of these structured fields. Do NOT log errors as free-text only — the structured fields enable automated analysis.
+
+```yaml
+errors:
+  # Page-level fetch error (a specific URL failed)
+  - skill: reddit-search              # REQUIRED: which skill produced this URL
+    timestamp: "2026-05-03T14:30:05Z" # REQUIRED: when the error occurred
+    error_type: access_blocked        # REQUIRED: access_blocked | rate_limited | timeout | empty_content | parse_error | redirect_error | server_error | login_required
+    http_status: 403                  # REQUIRED: actual HTTP status code, or null if no HTTP response (timeout, DNS failure)
+    url: "https://old.reddit.com/r/BuyItForLife/comments/abc123"  # REQUIRED: the specific URL that failed
+    fallback_used: google_snippets    # REQUIRED: google_cache | wayback | archive_ph | google_snippets | none
+    fallback_succeeded: true          # REQUIRED: did the fallback produce usable content?
+    error: "reddit.com returned 403 Forbidden; fell back to Google snippets, extracted 3 relevant snippets"  # REQUIRED: human-readable description for context
+
+  # Skill-level error (the entire skill failed, not a single URL)
+  - skill: email-sent
+    timestamp: "2026-05-03T14:32:52Z"
+    error_type: server_error
+    http_status: null
+    url: null
+    fallback_used: none
+    fallback_succeeded: false
+    error: "SMTP credentials not configured in .env — SENDER_EMAIL and SENDER_PASSWORD are empty"
+```
+
+### Error type definitions
+
+Use these exact values for `error_type` — do not invent new ones or use free-text:
+
+| error_type | When to use | Typical http_status |
+|---|---|---|
+| `access_blocked` | Server returned 403 or 451, or content is behind a paywall/login wall that blocks scraping | 403, 451 |
+| `rate_limited` | Server returned 429 or equivalent throttling response | 429 |
+| `timeout` | Request timed out or connection was dropped | null |
+| `empty_content` | Page loaded but contained no usable content (only nav, JS shell, or boilerplate) | 200 |
+| `parse_error` | Page content was returned but could not be meaningfully extracted (malformed HTML, unexpected format) | 200 |
+| `redirect_error` | URL redirected to an unrelated page or domain | 301, 302 |
+| `server_error` | Server returned 5xx or an unexpected server-side failure | 500, 502, 503 |
+| `login_required` | Content exists but requires authentication to access (distinct from access_blocked — the page tells you to log in rather than just blocking) | 200, 401 |
 
 ### Rules
 - Timestamps must come from `date -u +%Y-%m-%dT%H:%M:%SZ` (not estimated).
 - Write the log file **after** the report is saved — collect entries in memory during the run, then write once at the end.
 - `duration_seconds` is computed from `start_time` and `end_time`.
-- `fetch_success_rate` is `sources_succeeded / sources_selected`.
+- `fetch_success_rate` is `pages_fetch_succeeded / total_pages_fetched`.
 - Do not log the report content — just metadata.
+- **Every error MUST have all structured fields** (`error_type`, `http_status`, `url`, `fallback_used`, `fallback_succeeded`, `error`). Never omit fields or log a truncated error entry with only `skill` and `timestamp`. If a field is not applicable, write `null` — do not omit it.
+- **Every step MUST have all required fields** for its status type. A `partial` step must include `fallback_used`, `fallback_succeeded`, and `reason`. A `no_results` step must include `reason`. Never write a step entry with only `skill` and `timestamp`.
+- **Log individual page failures**, not just skill-level summaries. If 3 out of 5 fetched URLs returned 403, log 3 separate error entries with the specific URLs — not one entry saying "some pages blocked."
 - After writing the log, **update `sources/SOURCE-HEALTH.md`** with the success/failure status of each source from this run (see Adaptive Source Selection).
