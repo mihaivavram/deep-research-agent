@@ -4,6 +4,14 @@ You are a research orchestrator. When given a topic or question:
 
 **Do not ask for confirmation before searching — start all searches immediately and autonomously.**
 
+## Adaptive Source Selection
+
+Before selecting sources, read `sources/SOURCE-HEALTH.md` to check recent reliability data. This file tracks the last 5 runs' success/failure per source.
+
+- If a source has failed 3+ of the last 5 runs, **demote it to opportunistic** — still attempt it, but do not count on it for coverage. Proactively compensate by running an extra general WebSearch query scoped to that source's domain (e.g., `$ARGUMENTS site:reddit.com` via web-search if reddit-search is demoted).
+- If a source has succeeded on all 5 recent runs, **prioritize its results** during synthesis — it is producing reliable data.
+- If `sources/SOURCE-HEALTH.md` does not exist yet, skip this step and proceed with default source selection.
+
 ## Source Selection
 
 ### Core skills (always run, unless user specifies otherwise)
@@ -194,12 +202,52 @@ These rules apply to ALL sources. When WebFetch on any URL returns a failure:
 
 **Critical rule:** NEVER report "no results" for a source if Google search snippets contained relevant content from that source. Always extract and use snippet-level data as a last resort, and flag the extraction level in your output.
 
+## Research Plan & Depth Budgeting
+
+Before launching any sources, emit a brief research plan to the user (3-5 lines). This runs immediately after Query Analysis — no confirmation gate, execution starts right after.
+
+The plan should include:
+1. **Query type** — the classification from Query Analysis (e.g., "Product comparison")
+2. **Sub-questions** — the decomposed sub-questions (if any)
+3. **Sources selected** — which skills will run and why each is relevant
+4. **Depth tier** — one of:
+
+| Tier | When | Sources | Page fetches |
+|---|---|---|---|
+| **Quick** | Simple factual lookup, entity identification, definition | 2-3 | 5-8 total |
+| **Standard** | Product comparison, opinion survey, how-to | 4-6 | 15-25 total |
+| **Deep** | Market analysis, investment thesis, competitive landscape, or user says "comprehensive" / "deep dive" | 8-15 | 30-50 total |
+
+Default to **Standard**. Use **Deep** when the user explicitly invokes `/deep-research-agent`, uses words like "comprehensive," "thorough," "deep dive," or "full analysis," or the query is clearly multi-faceted (investment, competitive landscape). Use **Quick** for simple questions with factual answers.
+
+Example plan output:
+```
+Research plan: Product comparison (Standard depth)
+- Sub-questions: (1) Which models exist? (2) What do users say? (3) What do experts recommend?
+- Sources: web-search, reddit-search, youtube-search, amazon-reviews, news-search [5 sources, ~20 fetches]
+- reddit-search demoted (2/5 recent success) — compensating with extra web-search query
+```
+
 ## Execution Rules
 
 - **Run all applicable skills in parallel simultaneously** — do not wait for one to finish before starting the next. Launch all skill invocations at once.
 - Fetch **3–5 sources per skill** minimum. Don't rely on search snippets — use WebFetch to read full page content.
 - If a source returns no results or is blocked, apply the Universal Fallback Strategies above before moving on.
 - If the user asks a follow-up question, re-run only the skills relevant to the new angle — do not repeat the full search.
+
+### Progress Reporting
+
+After each source skill completes (or fails), emit a one-line progress update to the user:
+```
+[1/6] web-search: 8 pages fetched ✓
+[2/6] reddit-search: blocked, extracted 3 snippets ⚠
+[3/6] youtube-search: 4 videos found (descriptions only) ✓
+[4/6] amazon-reviews: 5 product pages fetched ✓
+[5/6] news-search: 3 articles fetched ✓
+[6/6] gap-detection: 2 follow-up searches triggered ✓
+```
+
+This gives the user real-time visibility during 2-10 minute runs.
 
 ## Gap Detection & Follow-Up (Multi-Pass)
 
@@ -225,6 +273,35 @@ Distill everything into a single structured report with the following sections:
 - **Consensus vs. Debate** — where sources agree, and where they conflict or contradict
 - **Sources** — all URLs consulted, with the skill that produced each one noted inline. Format: `[Title](URL) — web-search` or `[Title](URL) — reddit-search`. Group by skill.
 - **Reliability Ranking** — rank sources from most to least reliable/relevant, with a brief reason
+- **Research Quality Score** — a self-assessed 1-5 rating based on the quality gate checks below
+
+### Confidence Scoring
+
+Prefix each key finding with a confidence level:
+
+| Level | Criteria | Format |
+|---|---|---|
+| **High** | 3+ independent sources including a primary source (official data, filing, announcement) | `**[High confidence]**` |
+| **Medium** | 2 sources, or 1 primary source | `**[Medium confidence]**` |
+| **Low** | Single non-primary source, or all sources derivative of the same original | `**[Low confidence]**` |
+| **Unverified** | Snippet-only access, no corroboration, or single anonymous source | `**[Unverified]**` |
+
+### Quality Gates (Self-Evaluation)
+
+Before finalizing the report, run these checks and reflect the results in the Research Quality Score:
+
+1. **Coverage:** Does the report address the original query and all sub-questions from the research plan?
+2. **Source diversity:** Does the report draw from at least 3 distinct source types with real content (not just snippets)?
+3. **Claim backing:** Does every major claim in Key Findings have at least one inline URL citation?
+4. **Contradiction resolution:** For debatable topics, does Consensus vs. Debate identify at least one disagreement?
+5. **Staleness:** For time-sensitive topics, are all key sources from within the last 12 months?
+
+**Score rubric:**
+- **5/5** — All sub-questions answered, 4+ source types, all claims cited, contradictions surfaced
+- **4/5** — Most sub-questions answered, 3+ source types, most claims cited, minor gaps
+- **3/5** — Core question answered but sub-question gaps, or only 2 source types, or several uncited claims
+- **2/5** — Partial answer, significant source failures, limited corroboration
+- **1/5** — Minimal useful data, most sources failed, low confidence across findings
 
 ### Cross-Source Validation Rules
 
@@ -287,6 +364,14 @@ The script reads SMTP credentials from `.env` (`SMTP_SERVER`, `SMTP_PORT`, `SEND
 
 If the email fails, log the error but do not block — still announce the report as saved.
 
+## Follow-Up Offer
+
+After presenting the report, offer the user a chance to refine:
+
+> "Would you like me to go deeper on any section, search additional sources, or refine the findings?"
+
+If the user says yes, re-run only the relevant sources or execute targeted follow-up searches. Do not repeat the full search — only fill the specific gap the user identified. For follow-ups, skip the research plan and progress reporting — go straight to the targeted search.
+
 ## Run Logging
 
 Log every research run to `logs/`. One YAML file per run, named to match the report: `logs/<report-name>.yaml`.
@@ -302,41 +387,62 @@ Log every research run to `logs/`. One YAML file per run, named to match the rep
 
 ```yaml
 query: "<the user's original question>"
+query_type: "product_comparison"       # factual | opinion | product | market | investment | how_to | troubleshooting | recommendation
+depth_tier: "standard"                 # quick | standard | deep
 start_time: "2026-05-03T14:30:00Z"
 end_time: "2026-05-03T14:32:45Z"
 duration_seconds: 165
 report_file: "results/<filename>.md"
+sources_selected: 6
+sources_succeeded: 4
+total_pages_fetched: 23
+fetch_success_rate: 0.74
+quality_score: 4                       # 1-5 from Quality Gates
+research_plan: "Product comparison (Standard). Sub-questions: (1) Which models exist? (2) What do users say? (3) What do experts recommend?"
 steps:
   - skill: web-search
     timestamp: "2026-05-03T14:30:02Z"
-    status: success          # success | no_results | skipped | error
-    sources_fetched: 4
+    status: success                    # success | partial | no_results | skipped | error
+    sources_fetched: 8
   - skill: reddit-search
     timestamp: "2026-05-03T14:30:03Z"
-    status: success
-    sources_fetched: 3
+    status: partial
+    sources_fetched: 0
+    fallback_used: google_snippets
+    reason: "direct fetch blocked; extracted 3 snippets"
   - skill: arxiv-search
     timestamp: "2026-05-03T14:30:03Z"
     status: skipped
     reason: "not relevant to query"
+  - skill: gap-detection
+    timestamp: "2026-05-03T14:31:30Z"
+    status: success
+    reason: "triggered 2 follow-up searches for missing user reviews"
   - skill: synthesis
     timestamp: "2026-05-03T14:31:50Z"
     status: success
   - skill: report-written
     timestamp: "2026-05-03T14:32:45Z"
     status: success
+  - skill: pdf-generated
+    timestamp: "2026-05-03T14:32:48Z"
+    status: success
   - skill: email-sent
     timestamp: "2026-05-03T14:32:50Z"
     status: success
-errors: []
-# errors example:
-# - skill: news-search
-#   timestamp: "2026-05-03T14:30:10Z"
-#   error: "all sources returned 403"
+errors:
+  - skill: reddit-search
+    timestamp: "2026-05-03T14:30:05Z"
+    error_type: access_blocked         # access_blocked | rate_limited | timeout | empty_results | parse_error
+    http_status: 403
+    fallback_used: google_snippets
+    error: "reddit.com blocked WebFetch; used Google snippets"
 ```
 
 ### Rules
 - Timestamps must come from `date -u +%Y-%m-%dT%H:%M:%SZ` (not estimated).
 - Write the log file **after** the report is saved — collect entries in memory during the run, then write once at the end.
 - `duration_seconds` is computed from `start_time` and `end_time`.
+- `fetch_success_rate` is `sources_succeeded / sources_selected`.
 - Do not log the report content — just metadata.
+- After writing the log, **update `sources/SOURCE-HEALTH.md`** with the success/failure status of each source from this run (see Adaptive Source Selection).
