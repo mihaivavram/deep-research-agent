@@ -4,14 +4,16 @@ A Claude Code research agent that searches many web sources in parallel and
 distills everything into a structured, ranked report (Markdown and PDF). 
 Runs on the best and latest Claude model available and logs each run.
 
-## Requirements
+## Installation
 
-- Claude Code
-- Python 3.10+ (for PDF export)
-- System libraries for WeasyPrint (macOS: `brew install pango glib`; 
-  Linux: `apt install libpango-1.0-0 libglib2.0-0`)
+### 1. Clone the repo
 
-### Python setup
+```bash
+git clone <repo-url> ~/Repositories/Agents/deep-research-agent
+cd ~/Repositories/Agents/deep-research-agent
+```
+
+### 2. Python setup
 
 Create a virtual environment and install dependencies:
 
@@ -21,25 +23,77 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Or use an existing Python environment — just make sure the packages 
-in `requirements.txt` are installed.
+PDF generation uses `fpdf2` — pure Python, no system libraries required.
+
+### 3. Configure `.env`
+
+Create a `.env` file in the project root. This file is gitignored.
+
+```bash
+# Required — path to the Python virtualenv with fpdf2 installed
+VIRTUAL_ENV="/path/to/your/virtualenv"
+
+# Optional — email delivery (Gmail example, uses App Passwords)
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SENDER_EMAIL=you@gmail.com
+SENDER_PASSWORD="xxxx xxxx xxxx xxxx"
+RECIPIENT_EMAIL=recipient@example.com
+
+# Optional — display name on sent emails (default: "Deep Research Agent")
+SENDER_NAME="Deep Research Agent"
+```
+
+**`VIRTUAL_ENV`** is required for PDF export. Point it at the virtualenv 
+where you installed `requirements.txt`. The PDF script activates this env 
+at runtime.
+
+**Email** is opt-in. If the SMTP variables are set, you can say "email me 
+the results" in your query and the agent will send the report as an 
+attachment. For Gmail, generate an 
+[App Password](https://myaccount.google.com/apppasswords) — your regular 
+password won't work with 2FA enabled.
+
+### 4. Install as a global Claude Code skill (optional)
+
+Link the project into Claude Code's skill directories so 
+`/deep-research-agent` is available from any project, not just when you 
+`cd` into this repo:
+
+```bash
+# Step 1 — link into the shared agents directory
+ln -s "$(pwd)" ~/.agents/skills/deep-research-agent
+
+# Step 2 — link into Claude Code's skill directory
+ln -s ~/.agents/skills/deep-research-agent ~/.claude/skills/deep-research-agent
+```
+
+After this, `/deep-research-agent <query>` works from any directory in 
+Claude Code. The skill reads its `SKILL.md`, `REFERENCE.md`, source 
+strategies, and scripts from the symlinked project — no copies, no drift.
+
+> **Note:** When invoked as a global skill, reports and logs are saved in 
+> the *current working directory* (under `results/` and `logs/`), not in 
+> the agent's installation directory.
 
 ## Usage
 
-Open this folder in Claude Code:
-
-```bash
-cd ~/Repositories/Agents/research-agent
-```
-
-Then just ask your research question:
+Open any project in Claude Code (or just a terminal) and ask your research 
+question:
 
 ```
 What are the best mechanical keyboards under $150?
 ```
 
+Or invoke it explicitly as a skill:
+
+```
+/deep-research-agent What are the best mechanical keyboards under $150?
+```
+
 The agent automatically selects which sources to search, runs them all in 
-parallel, and returns a synthesized report.
+parallel, and returns a synthesized report with Markdown and PDF output. 
+If email is configured, add "email me the results" to your query.
 
 > **Tip:** Prefix your query with `ultrathink` for deeper reasoning and 
 > synthesis across sources. Best for complex queries where you want richer 
@@ -390,7 +444,7 @@ Logs are local only (gitignored).
 | `sources/triage-config.yaml` | Triage scoring weights, thresholds, re-query settings |
 | `sources/SOURCE-HEALTH.md` | Per-source success/failure tracking across runs (auto-updated) |
 | `sources/<name>.md` | Search strategy for each source (site-scoped queries, extraction guidance, fallbacks) |
-| `.env` | Python virtualenv path, SMTP credentials for email delivery |
+| `.env` | `VIRTUAL_ENV` path (required for PDF), SMTP credentials (optional, for email delivery) |
 
 ---
 
@@ -402,18 +456,34 @@ Logs are local only (gitignored).
 ├── REFERENCE.md                 # Source routing quick-reference
 ├── SKILL.md                     # Skill definition for Claude Code
 ├── README.md                    # This file
+├── .env                         # VIRTUAL_ENV path + SMTP credentials (gitignored)
+├── requirements.txt             # Python dependencies (fpdf2)
 ├── sources/
 │   ├── triage-config.yaml       # Triage scoring configuration
 │   ├── SOURCE-HEALTH.md         # Source reliability tracking
 │   ├── web-search.md            # Source strategy files (one per source)
 │   ├── reddit-search.md
-│   └── ...                      # 35 source strategies
+│   └── ...                      # 34 source strategies total
 ├── scripts/
-│   ├── md_to_pdf.py             # Markdown → styled PDF conversion
-│   ├── report_pdf.py            # PDF generation helpers
+│   ├── md_to_pdf.py             # CLI wrapper — Markdown → PDF
+│   ├── report_pdf.py            # PDF engine (fpdf2-based, pure Python)
 │   └── send_email.py            # Email delivery with SMTP
 ├── results/                     # Generated reports (gitignored contents)
 ├── logs/                        # Run logs (gitignored contents)
-├── .env                         # Environment config (gitignored)
-└── requirements.txt             # Python dependencies
+└── .claude/
+    ├── commands/                 # Symlinks to sources/*.md (slash commands)
+    ├── settings.json             # Model and permission config
+    └── skills/                   # Skill definitions
+```
+
+### Global installation layout
+
+When installed as a global skill (see Installation step 4):
+
+```
+~/.agents/skills/
+└── deep-research-agent -> /path/to/deep-research-agent   # symlink to repo
+
+~/.claude/skills/
+└── deep-research-agent -> ~/.agents/skills/deep-research-agent  # chains to above
 ```

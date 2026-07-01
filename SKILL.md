@@ -1,11 +1,11 @@
 ---
 name: deep-research-agent
-description: Multi-source deep research agent. Runs parallel searches across 37+ sources (web, Reddit, YouTube, arXiv, SEC, FRED, social media, product review sites, and more), synthesizes findings into a structured report with PDF export. Use when user wants to research a topic deeply, investigate a question, or do competitive/market/investment analysis.
+description: Multi-source deep research agent. Runs parallel searches across 34+ sources (web, Reddit, YouTube, arXiv, SEC, FRED, social media, product review sites, and more), synthesizes findings into a structured report with PDF export. Use when user wants to research a topic deeply, investigate a question, or do competitive/market/investment analysis.
 ---
 
 # Deep Research Agent
 
-Research orchestrator that searches 37+ sources in parallel and synthesizes findings.
+Research orchestrator that searches 34+ sources in parallel and synthesizes findings.
 
 ## Quick start
 
