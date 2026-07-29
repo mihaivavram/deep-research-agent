@@ -11,10 +11,13 @@ Quora aggressively blocks direct WebFetch (returns 403). **Use archive and snipp
 - For comparison questions: `site:quora.com "$ARGUMENTS" vs OR difference between` — Quora hosts many high-quality explainer comparisons
 
 **Fetching content — ordered fallback chain:**
-1. **Wayback Machine (best path for full content):** For each Quora URL found via Google, WebFetch `https://web.archive.org/web/*/QUORA_URL`. Quora's older content is well-archived on Wayback and returns full answers with author credentials.
-2. **archive.ph:** Try `https://archive.ph/newest/QUORA_URL` — often has recent snapshots.
-3. **Direct WebFetch (attempt but expect failure):** Try fetching the Quora URL directly. Occasionally works, especially for older questions. If it returns 403 or a login wall, move to the next fallback.
-4. **Google snippet extraction (always works):** Google snippets from Quora searches typically contain:
+**Do not attempt `web.archive.org` or `archive.ph`** — both refused at the client level in this
+environment. They were formerly documented as the best path here; they are dead.
+
+1. **Direct WebFetch (attempt once, expect failure):** Try fetching the Quora URL directly.
+   Occasionally works for older questions. On 403 or a login wall, move on — do not retry.
+2. **Google cache:** WebSearch for `cache:QUORA_URL`.
+3. **Google snippet extraction (the realistic path):** Google snippets from Quora searches typically contain:
    - The question title
    - Author name and credential line (e.g. "John Smith, Former VP Engineering at Google")
    - First 200-400 words of the top answer
@@ -44,4 +47,4 @@ For technical topics, search Stack Exchange as an alternative: `site:stackexchan
 - Watch for paid promotional answers (rare but they exist)
 - Report "no results" if Google snippets contained relevant credentialed answers — extract and use them
 
-Return: question summary, top credentialed answer summaries with **author credentials always cited**, points of disagreement between answers, upvote signal, and source URLs. Flag whether content came from full-page access, Wayback archive, or snippet-level extraction.
+Return: question summary, top credentialed answer summaries with **author credentials always cited**, points of disagreement between answers, upvote signal, and source URLs. Flag whether content came from full-page access or snippet-level extraction.

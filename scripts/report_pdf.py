@@ -16,6 +16,81 @@ from fpdf.fonts import FontFace
 
 
 # ---------------------------------------------------------------------------
+# Emoji handling
+#
+# The embedded fonts (Arial on macOS, DejaVu on Linux) have no emoji coverage, and
+# fpdf2 cannot embed Apple Color Emoji (a bitmap font). Previously emoji reached the
+# renderer unchanged whenever a Unicode font loaded, so they were dropped SILENTLY —
+# a report could lose ✅/⚠️/🎯 markers with no indication anywhere.
+#
+# Emoji are now transliterated to ASCII before rendering. Anything unmapped is removed
+# and recorded in DROPPED_EMOJI so the caller can warn instead of losing it quietly.
+# ---------------------------------------------------------------------------
+
+_EMOJI_TEXT = {
+    "✅": "[ok]",   "☑️": "[ok]",  "✔️": "[ok]",  "✔": "[ok]",
+    "❌": "[x]",    "✖️": "[x]",   "❎": "[x]",
+    "⚠️": "[!]",    "⚠": "[!]",    "❗": "[!]",   "❕": "[!]",  "‼️": "[!!]",
+    "🚩": "[flag]", "🔺": "[up]",  "🔻": "[down]",
+    "⬆️": "[up]",   "⬇️": "[down]", "➡️": "->",   "⬅️": "<-",
+    "📈": "[up]",   "📉": "[down]", "📊": "[chart]",
+    "🎯": "[target]", "⭐": "*",    "🌟": "*",     "★": "*",     "☆": "*",
+    "▶️": ">",      "▶": ">",      "◀": "<",      "⏸": "[pause]",
+    "🔴": "[red]",  "🟢": "[green]", "🟡": "[yellow]", "🔵": "[blue]",
+    "🟠": "[orange]", "🟣": "[purple]", "⚫": "[black]", "⚪": "[white]",
+    "💡": "[idea]", "🔍": "[search]", "🔎": "[search]",
+    "📝": "[note]", "📌": "[pin]", "📍": "[pin]", "🔗": "[link]",
+    "✨": "*",      "🔥": "[hot]", "💰": "[$]",   "💵": "[$]",  "💲": "$",
+    "🏆": "[win]",  "👍": "[+]",   "👎": "[-]",   "🙌": "[+]",
+    "✅️": "[ok]",  "🆕": "[new]", "🔒": "[locked]", "🔓": "[unlocked]",
+    "⏱️": "[time]", "⏰": "[time]", "🗓️": "[date]", "📅": "[date]",
+    "🚀": "[launch]", "🧠": "[ai]", "🤖": "[bot]", "⚙️": "[config]",
+    "❓": "?",      "❔": "?",     "➕": "+",     "➖": "-",
+    "•": "-",       "◦": "-",      "‣": "-",
+}
+
+# Emoji, pictographs, dingbats, flags, variation selectors, skin-tone modifiers, ZWJ.
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F000-\U0001FAFF"
+    "\U00002600-\U000027BF"
+    "\U0001F1E6-\U0001F1FF"
+    "\U00002B00-\U00002BFF"
+    "\U0000FE00-\U0000FE0F"
+    "\U0001F3FB-\U0001F3FF"
+    "\U0000200D"
+    "\U000024C2-\U0001F251"
+    "]+",
+    flags=re.UNICODE,
+)
+
+# Emoji encountered with no ASCII mapping. Populated during rendering so the CLI can
+# report them rather than dropping them without a trace.
+DROPPED_EMOJI = set()
+
+
+def transliterate_emoji(text):
+    """Replace emoji with ASCII equivalents; record any that had no mapping."""
+    if not text:
+        return text
+    # Longest-first so multi-codepoint sequences (e.g. "⚠️" = U+26A0 U+FE0F) win.
+    for glyph in sorted(_EMOJI_TEXT, key=len, reverse=True):
+        if glyph in text:
+            text = text.replace(glyph, _EMOJI_TEXT[glyph])
+
+    def _drop(match):
+        chunk = match.group(0)
+        # Bare variation selectors / ZWJ left over from a mapped sequence: not a loss.
+        if all(ch in "︎️‍" for ch in chunk):
+            return ""
+        DROPPED_EMOJI.add(chunk)
+        return ""
+
+    text = _EMOJI_RE.sub(_drop, text)
+    return re.sub(r"  +", " ", text)
+
+
+# ---------------------------------------------------------------------------
 # Inline markdown parser
 # ---------------------------------------------------------------------------
 
@@ -148,7 +223,13 @@ class ReportPDF(FPDF):
             pass
 
     def _s(self, text):
-        """Sanitize text for the active font encoding."""
+        """Sanitize text for the active font encoding.
+
+        Emoji transliteration runs on BOTH paths: the embedded Unicode fonts have no
+        emoji glyphs, so passing emoji through when self._unicode is True is exactly
+        how they used to disappear.
+        """
+        text = transliterate_emoji(text)
         if self._unicode:
             return text
         reps = {

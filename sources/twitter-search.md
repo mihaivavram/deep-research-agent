@@ -31,11 +31,14 @@ Many tweets are embedded in news articles, blog posts, and newsletters. Search f
 - **Sentiment direction**: high-engagement posts reveal which framing is winning the narrative
 
 **Fallback strategies (in order):**
-1. **archive.ph** — `https://archive.ph/newest/TWEET_URL` often has readable snapshots
-2. **Wayback Machine** — `https://web.archive.org/web/*/twitter.com/USERNAME/status/ID` for older tweets
-3. **Google cache** — `cache:twitter.com/...` URLs sometimes return readable snapshots
-4. **Quote-tweet chains** — searching for the tweet ID in Google often surfaces quote-tweets that contain the original text
-5. **Google snippet extraction** — when all fetch paths fail, extract tweet text from Google search snippets and flag as "snippet-level only"
+1. **threadreaderapp** — `threadreaderapp.com/search?q=...` unrolls threads and fetches cleanly.
+   Best path for long-form threads.
+2. **Quote-tweet chains** — searching the tweet ID or a distinctive phrase in Google often surfaces
+   quote-tweets, embeds, or articles that reproduce the original text
+3. **Google cache** — `cache:twitter.com/...` sometimes returns readable snapshots
+4. **Google snippet extraction** — extract tweet text from search snippets, flag as "snippet-level only"
+
+**Do not attempt `archive.ph` or `web.archive.org`** — both refused at the client level here.
 
 **Do NOT:**
 - Rely on the X frontend directly — it requires login for almost everything

@@ -172,9 +172,11 @@ Three depth tiers control how many sources and pages are fetched:
 All selected sources run simultaneously. Each source has a strategy file 
 (`sources/<name>.md`) with site-specific search tactics, extraction guidance, 
 and fallback chains. If a source is blocked or returns empty results, 
-the agent falls back through Google cache, Wayback Machine, archive.ph, 
+the agent falls back through the platform's public API (e.g. pullpush for Reddit, 
+Algolia for Hacker News), an alternate publisher of the same data, Google cache, 
 and finally snippet extraction — never reporting "no results" if snippets 
-contained relevant content.
+contained relevant content. Wayback and archive.ph are refused in this 
+environment and are not attempted.
 
 ### 4. Source triage (per-page quality gate)
 
@@ -230,7 +232,7 @@ During execution, the agent emits real-time progress:
 |---|---|
 | `/web-search <query>` | General internet search — reads full articles, not just snippets |
 | `/reddit-search <query>` | Reddit threads and top comments across multiple subreddits |
-| `/youtube-search <query>` | YouTube videos — transcripts, descriptions, top comments |
+| `/youtube-search <query>` | YouTube videos — titles, descriptions, metadata (**transcripts are not obtainable in this environment**) |
 
 ### Optional: General research — used automatically when relevant, or on explicit request
 
@@ -342,7 +344,7 @@ Every report includes:
 - **Key Findings** — top takeaways synthesized across all sources, each prefixed with a confidence level (High / Medium / Low / Unverified) based on source count and type
 - **By Source** — what each source distinctly contributed
 - **Consensus vs. Debate** — where sources agree, and where they conflict
-- **Sources** — all URLs, each tagged with the skill that found it (e.g. `— reddit-search`). Pages that failed triage are listed with `[triaged out — score X/9]`
+- **Sources** — all URLs, each tagged with the skill that found it (e.g. `— reddit-search`). Pages that failed triage are listed with `[triaged out — score X/12]`
 - **Reliability Ranking** — sources ranked most to least reliable, with publication date and bias signals noted
 - **Research Quality Score** — self-assessed 1-5 based on coverage, source diversity, claim backing, contradiction resolution, and staleness checks
 
@@ -394,9 +396,18 @@ and notes freshness for time-sensitive topics.
 
 ### Universal fallback chain
 
-When any source is blocked (403, 429, 451, timeout, empty): Google cache, 
-Wayback Machine, archive.ph, then snippet extraction. The agent never reports 
-"no results" if search snippets contained relevant content.
+When any source is blocked (403, 429, 451, timeout, empty), in order:
+
+1. **The platform's public API** — highest-yield tier and the one most often skipped
+   (`api.pullpush.io` for Reddit, `hn.algolia.com` for Hacker News, EDGAR, FRED).
+   A blocked HTML page is not evidence the data is inaccessible.
+2. **An alternate publisher of the same data** — wire services and trade press.
+3. **Google cache.**
+4. **Snippet extraction**, explicitly flagged.
+
+The agent never reports "no results" if search snippets contained relevant content, and 
+never records a source as unavailable without first trying an API. Wayback, archive.ph, 
+and `r.jina.ai` are all refused in this environment and are not attempted.
 
 ---
 

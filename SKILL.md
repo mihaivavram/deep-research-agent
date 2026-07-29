@@ -40,7 +40,8 @@ Read `sources/SOURCE-HEALTH.md`. Demote sources with 3+/5 recent failures (compe
 - Run all source searches **in parallel** — launch all at once
 - For each source: follow the strategy in its `.md` file, using WebSearch and WebFetch directly
 - Fetch **3–5 full pages per source** minimum — don't rely on search snippets
-- On failure: follow universal fallback chain (Google cache → Wayback → archive.ph → snippet extraction)
+- On failure: follow universal fallback chain (platform API → alternate publisher → Google cache →
+  snippet extraction). **Wayback and archive.ph are refused at client level — do not attempt them.**
 - For follow-up questions, re-run only relevant sources
 
 ### 6. Source triage

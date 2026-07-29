@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from report_pdf import render_report  # noqa: E402
+from report_pdf import DROPPED_EMOJI, render_report  # noqa: E402
 
 
 def main() -> None:
@@ -30,6 +30,18 @@ def main() -> None:
     dst = Path(args.output) if args.output else src.with_suffix(".pdf")
     render_report(src.read_text(encoding="utf-8"), dst)
     print(dst)
+
+    # The embedded fonts carry no emoji glyphs. Mapped emoji become ASCII markers;
+    # anything unmapped is reported here rather than vanishing from the PDF unnoticed.
+    if DROPPED_EMOJI:
+        glyphs = " ".join(sorted(DROPPED_EMOJI))
+        print(
+            f"warning: {len(DROPPED_EMOJI)} emoji had no ASCII mapping and were removed "
+            f"from the PDF: {glyphs}\n"
+            f"         add them to _EMOJI_TEXT in scripts/report_pdf.py, or avoid emoji "
+            f"in reports.",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":

@@ -5,6 +5,13 @@ Hacker News is a high-signal source for developer culture, startup dynamics, tec
 **Primary strategy — Algolia API (most reliable, no rate limits):**
 WebFetch `https://hn.algolia.com/api/v1/search?query=QUERY&tags=story&hitsPerPage=10` — returns JSON with story titles, URLs, points, comment counts, and story IDs. This is the most reliable path and avoids the 429 rate limits that plague direct `news.ycombinator.com` fetches.
 
+**Algolia is query-syntax sensitive — this is the #1 cause of false "no results" here.**
+Quoted multi-term queries and `OR` expressions return `nbHits=0` even when matching stories exist.
+- Use **short, unquoted keyword queries** — `query=espresso machine`, not `query="espresso machine"`.
+- Do **not** use `OR`. Run separate queries instead and merge the results yourself.
+- Filter for substance with `numericFilters=points>20` rather than by adding query terms.
+- If a query returns `nbHits=0`, **drop a term and retry before concluding the topic is absent.**
+
 Run multiple Algolia queries for coverage:
 - `query=QUERY&tags=story` — all stories mentioning the topic
 - `query=QUERY&tags=show_hn` — Show HN posts (projects and launches)
