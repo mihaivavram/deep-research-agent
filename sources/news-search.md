@@ -25,10 +25,14 @@ These outlets consistently return 403/451 and waste tokens:
 - CNBC (intermittent), CNN (intermittent), Forbes (soft paywall)
 
 For paywalled outlets found in search results:
-1. Extract the headline, byline, and Google snippet text (often contains the key data point)
-2. Try `archive.ph/newest/PAYWALLED_URL` — often has readable snapshots
-3. Try `web.archive.org/web/*/PAYWALLED_URL` — works for older articles
-4. Search for the same story on an accessible outlet — wire service stories (Reuters, AP) are syndicated widely
+1. **Search for the same story on an accessible outlet — the highest-yield move.** Wire service
+   stories (Reuters, AP) are syndicated widely, and `globenewswire.com` / `businesswire.com` /
+   `prnewswire.com` carry the same figures and fetch cleanly.
+2. Extract the headline, byline, and Google snippet text (often contains the key data point)
+3. Try Google cache: WebSearch for `cache:PAYWALLED_URL`
+
+**Do not attempt `archive.ph` or `web.archive.org`** — both are refused at the client level in this
+environment. Known-403 outlets: **GeekWire, CNBC.** Go straight to an alternate publisher.
 
 **Press release primary sources:**
 For corporate news, search the company's newsroom directly:

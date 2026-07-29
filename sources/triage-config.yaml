@@ -3,7 +3,7 @@
 # Edit these values to tune triage strictness per depth tier.
 
 # Scoring axes — each page is scored 0-3 on each axis.
-# Max possible score = 9 (sum of all three axes).
+# Max possible score = 12 (sum of all four axes).
 axes:
   relevance:
     weight: 1          # multiplier applied to this axis score
@@ -14,13 +14,33 @@ axes:
   recency:
     weight: 1
     description: "How current the content is relative to the topic's time-sensitivity (0=severely outdated, 1=older but still relevant, 2=reasonably current, 3=very recent or evergreen)"
+  independence:
+    weight: 1
+    description: >
+      Whether this page is ORIGINAL evidence or a derivative copy of someone else's.
+      This axis exists to enforce citation-chain discipline: three pages restating one
+      study are one piece of evidence, not three.
+      0 = syndicated/republished copy, AI-spun content farm, or press release reprinted verbatim
+      1 = summarizes another source with no added reporting or analysis
+      2 = adds original analysis, testing, or context on top of cited sources
+      3 = original reporting, primary data, first-hand experience, or the underlying study itself
+
+# Bias / incentive flags — applied as penalties after scoring.
+# A page can be relevant, authoritative, recent AND financially motivated to mislead.
+# Flag it, penalize it, and disclose the incentive in the report.
+bias_penalties:
+  affiliate_or_sponsored: 2      # affiliate links, "best X" listicles monetized by referral
+  vendor_self_interest: 2        # vendor market-sizing, TAM/CAGR reports, own-product claims
+  undisclosed_position: 1        # financial content where the author may hold a position
+  seo_content_farm: 3            # no author, no date, generic phrasing, keyword-stuffed
+# Note: apply at most the single largest applicable bias penalty, not the sum.
 
 # Minimum score thresholds — pages scoring below are dropped from synthesis.
-# Score range: 0 to 9 (unweighted) or 0 to 9*max_weight (weighted).
+# Score range: 0 to 12. Raised from the previous 9-point scale to stay proportional.
 thresholds:
-  quick: 5             # stricter — only high-quality pages for fast answers
-  standard: 4          # balanced — default
-  deep: 3              # more permissive — cast a wide net, keep more signal
+  quick: 7             # stricter — only high-quality pages for fast answers
+  standard: 5          # balanced — default
+  deep: 4              # more permissive — cast a wide net, keep more signal
 
 # Re-query triggers — if fewer than this many pages survive triage
 # per sub-question, fire a targeted re-query.
@@ -30,13 +50,22 @@ min_surviving_pages:
   deep: 4
 
 # Maximum re-query rounds before accepting whatever survived.
-max_requery_rounds: 2
+# Raised from 2 to 3: 3 of 5 logged runs hit the round-2 ceiling while still
+# below the surviving-pages minimum, meaning they gave up under-covered.
+max_requery_rounds: 3
 
 # Re-query strategy — how to reformulate when re-querying.
+# Ordered: try the cheapest reformulation first, escalate to new sources.
 requery_strategies:
   - "reformulate with synonyms and alternative phrasing"
+  - "try the platform's API if the HTML path failed (pullpush for Reddit, Algolia for HN)"
+  - "find an alternate publisher of the same underlying data (wire services, trade press)"
   - "narrow scope to most specific sub-question"
-  - "try alternate source (e.g., web-search if specialized source failed)"
+  - "try alternate source (e.g., web-search with site: scoping if specialized source failed)"
+
+# If a sub-question is STILL below minimum after max_requery_rounds,
+# the report must disclose the gap rather than silently synthesizing over it.
+disclose_residual_gaps: true
 
 # Snippet-sourced pages get an automatic penalty.
 # This is subtracted from their total score before threshold comparison.

@@ -27,6 +27,13 @@ LinkedIn is heavily gated — most feed content requires login. But four public 
 - `site:linkedin.com/company COMPANY-NAME` — for the company overview, headcount range, recent posts
 - The "Insights" tab is gated but the public posts and headcount are visible
 
+**Measured reality — set expectations accordingly:** across logged runs, LinkedIn URLs have
+**never fetched successfully**, including Pulse and public-post URLs. Plan for snippet-level
+extraction as the default, not the fallback. Snippets do reliably carry two genuinely useful
+numbers: **group member counts and company follower counts** — good for sizing an audience, useless
+for content. For substance, substitute trade press, and use `/blind-search` (teamblind.com fetches
+cleanly) for employee perspective.
+
 **Fallback strategies:**
 1. If LinkedIn returns a login wall on direct fetch, **rely on Google snippets only** — they often contain enough text to extract the key claim
 2. For profile-style queries, cross-reference with `/crunchbase-search` (founder bios) and `/glassdoor-search` (company-side context)

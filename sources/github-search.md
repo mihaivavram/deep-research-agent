@@ -15,6 +15,11 @@ WebFetch `https://github.com/search?q=QUERY&type=repositories&sort=stars` to fin
 
 1. **README content (highest value):** WebFetch `https://raw.githubusercontent.com/OWNER/REPO/main/README.md` (try `master` if `main` fails). READMEs contain: project purpose, features, installation, usage examples, and comparison to alternatives.
 
+   **Always prefer `raw.githubusercontent.com` over `/blob/` URLs** — `/blob/` HTML views
+   frequently return empty bodies via WebFetch. Repo landing pages can also come back
+   metadata-thin; when that happens, recover the content via the raw README rather than retrying
+   the landing page.
+
 2. **Repository metadata (from the repo page):** WebFetch `https://github.com/OWNER/REPO` and extract:
    - Star count (popularity signal — >1K stars = significant adoption)
    - Fork count (developer engagement)

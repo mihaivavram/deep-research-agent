@@ -1,7 +1,7 @@
 Convert a research report to PDF: $ARGUMENTS
 
 ## What this does
-Converts a Markdown report from the `results/` directory into a styled PDF using WeasyPrint.
+Converts a Markdown report from the `results/` directory into a styled PDF.
 
 ## How to run
 

@@ -11,6 +11,83 @@ import re
 from pathlib import Path
 
 from fpdf import FPDF
+from fpdf.enums import TableCellFillMode
+from fpdf.fonts import FontFace
+
+
+# ---------------------------------------------------------------------------
+# Emoji handling
+#
+# The embedded fonts (Arial on macOS, DejaVu on Linux) have no emoji coverage, and
+# fpdf2 cannot embed Apple Color Emoji (a bitmap font). Previously emoji reached the
+# renderer unchanged whenever a Unicode font loaded, so they were dropped SILENTLY —
+# a report could lose ✅/⚠️/🎯 markers with no indication anywhere.
+#
+# Emoji are now transliterated to ASCII before rendering. Anything unmapped is removed
+# and recorded in DROPPED_EMOJI so the caller can warn instead of losing it quietly.
+# ---------------------------------------------------------------------------
+
+_EMOJI_TEXT = {
+    "✅": "[ok]",   "☑️": "[ok]",  "✔️": "[ok]",  "✔": "[ok]",
+    "❌": "[x]",    "✖️": "[x]",   "❎": "[x]",
+    "⚠️": "[!]",    "⚠": "[!]",    "❗": "[!]",   "❕": "[!]",  "‼️": "[!!]",
+    "🚩": "[flag]", "🔺": "[up]",  "🔻": "[down]",
+    "⬆️": "[up]",   "⬇️": "[down]", "➡️": "->",   "⬅️": "<-",
+    "📈": "[up]",   "📉": "[down]", "📊": "[chart]",
+    "🎯": "[target]", "⭐": "*",    "🌟": "*",     "★": "*",     "☆": "*",
+    "▶️": ">",      "▶": ">",      "◀": "<",      "⏸": "[pause]",
+    "🔴": "[red]",  "🟢": "[green]", "🟡": "[yellow]", "🔵": "[blue]",
+    "🟠": "[orange]", "🟣": "[purple]", "⚫": "[black]", "⚪": "[white]",
+    "💡": "[idea]", "🔍": "[search]", "🔎": "[search]",
+    "📝": "[note]", "📌": "[pin]", "📍": "[pin]", "🔗": "[link]",
+    "✨": "*",      "🔥": "[hot]", "💰": "[$]",   "💵": "[$]",  "💲": "$",
+    "🏆": "[win]",  "👍": "[+]",   "👎": "[-]",   "🙌": "[+]",
+    "✅️": "[ok]",  "🆕": "[new]", "🔒": "[locked]", "🔓": "[unlocked]",
+    "⏱️": "[time]", "⏰": "[time]", "🗓️": "[date]", "📅": "[date]",
+    "🚀": "[launch]", "🧠": "[ai]", "🤖": "[bot]", "⚙️": "[config]",
+    "❓": "?",      "❔": "?",     "➕": "+",     "➖": "-",
+    "•": "-",       "◦": "-",      "‣": "-",
+}
+
+# Emoji, pictographs, dingbats, flags, variation selectors, skin-tone modifiers, ZWJ.
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F000-\U0001FAFF"
+    "\U00002600-\U000027BF"
+    "\U0001F1E6-\U0001F1FF"
+    "\U00002B00-\U00002BFF"
+    "\U0000FE00-\U0000FE0F"
+    "\U0001F3FB-\U0001F3FF"
+    "\U0000200D"
+    "\U000024C2-\U0001F251"
+    "]+",
+    flags=re.UNICODE,
+)
+
+# Emoji encountered with no ASCII mapping. Populated during rendering so the CLI can
+# report them rather than dropping them without a trace.
+DROPPED_EMOJI = set()
+
+
+def transliterate_emoji(text):
+    """Replace emoji with ASCII equivalents; record any that had no mapping."""
+    if not text:
+        return text
+    # Longest-first so multi-codepoint sequences (e.g. "⚠️" = U+26A0 U+FE0F) win.
+    for glyph in sorted(_EMOJI_TEXT, key=len, reverse=True):
+        if glyph in text:
+            text = text.replace(glyph, _EMOJI_TEXT[glyph])
+
+    def _drop(match):
+        chunk = match.group(0)
+        # Bare variation selectors / ZWJ left over from a mapped sequence: not a loss.
+        if all(ch in "︎️‍" for ch in chunk):
+            return ""
+        DROPPED_EMOJI.add(chunk)
+        return ""
+
+    text = _EMOJI_RE.sub(_drop, text)
+    return re.sub(r"  +", " ", text)
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +223,13 @@ class ReportPDF(FPDF):
             pass
 
     def _s(self, text):
-        """Sanitize text for the active font encoding."""
+        """Sanitize text for the active font encoding.
+
+        Emoji transliteration runs on BOTH paths: the embedded Unicode fonts have no
+        emoji glyphs, so passing emoji through when self._unicode is True is exactly
+        how they used to disappear.
+        """
+        text = transliterate_emoji(text)
         if self._unicode:
             return text
         reps = {
@@ -278,125 +361,52 @@ class ReportPDF(FPDF):
         self.l_margin = saved
         self.ln(1)
 
-    def _calc_cell_height(self, text, col_width, line_h):
-        """Calculate the height needed for wrapped text in a cell."""
-        usable = col_width - 3  # 1.5mm padding each side
-        if not text or usable <= 0:
-            return line_h
-        words = text.split(" ")
-        lines = 1
-        current_line = ""
-        for word in words:
-            test = f"{current_line} {word}".strip()
-            if self.get_string_width(test) > usable:
-                if current_line:
-                    lines += 1
-                    current_line = word
-                else:
-                    current_line = word
-            else:
-                current_line = test
-        return max(lines * line_h, line_h)
-
     def add_table(self, headers, rows):
+        """Render a markdown table via fpdf2's native Table API.
+
+        Uses library-managed row heights and wrapping so long cell text no
+        longer overflows into neighboring rows (the old hand-rolled
+        rect + multi_cell path).
+        """
         if not headers:
             return
         ncols = len(headers)
-        W = self.w - self.l_margin - self.r_margin
-        line_h = 5  # single line height within cells
-
-        # Column widths: ensure each column fits its widest word, then
-        # distribute remaining space proportionally to content length.
         self.set_font(self._sans, "", self.SMALL_PT)
-        padding = 3  # 1.5mm each side
-        min_widths = []
-        content_lens = []
-        for ci in range(ncols):
-            widest_word_w = self.get_string_width(headers[ci])
-            col_max_len = len(headers[ci])
-            for row in rows:
-                val = str(row[ci]) if ci < len(row) else ""
-                col_max_len = max(col_max_len, len(val))
-                for word in val.split(" "):
-                    widest_word_w = max(widest_word_w, self.get_string_width(word))
-            min_widths.append(widest_word_w + padding + 1)
-            content_lens.append(max(col_max_len, 3))
-
-        total_min = sum(min_widths)
-        if total_min >= W:
-            scale = W / total_min
-            widths = [mw * scale for mw in min_widths]
-        else:
-            remaining = W - total_min
-            total_lens = sum(content_lens)
-            widths = [
-                mw + remaining * (cl / total_lens)
-                for mw, cl in zip(min_widths, content_lens)
-            ]
-
-        def _render_header():
-            self.set_font(self._sans, "B", self.SMALL_PT)
-            self.set_fill_color(*self.NAVY)
-            self.set_text_color(*self.WHITE)
-            self.set_draw_color(*self.NAVY)
-            x0 = self.get_x()
-            y0 = self.get_y()
-            row_h = line_h + 2
-            for ci, h in enumerate(headers):
-                x = x0 + sum(widths[:ci])
-                self.rect(x, y0, widths[ci], row_h, "DF")
-                self.set_xy(x + 1.5, y0 + 1)
-                self.cell(widths[ci] - 3, line_h, self._s(h),
-                          new_x="RIGHT", new_y="TOP")
-            self.set_xy(x0, y0 + row_h)
-            self.set_text_color(*self.DARK)
-
-        _render_header()
-
-        # Data rows
-        self.set_font(self._sans, "", self.SMALL_PT)
+        self.set_text_color(*self.DARK)
         self.set_draw_color(*self.BORDER)
-        for ri, row in enumerate(rows):
-            # Calculate row height based on tallest cell
-            cells = []
-            for ci in range(ncols):
-                val = self._s(str(row[ci])) if ci < len(row) else ""
-                cells.append(val)
-            self.set_font(self._sans, "", self.SMALL_PT)
-            row_h = line_h + 2  # minimum row height
-            for ci, val in enumerate(cells):
-                ch = self._calc_cell_height(val, widths[ci], line_h) + 2
-                row_h = max(row_h, ch)
+        self.set_line_width(0.2)
 
-            # Page break with repeated header
-            if self.get_y() + row_h > self.h - self.b_margin:
-                self.add_page()
-                _render_header()
-                self.set_font(self._sans, "", self.SMALL_PT)
-                self.set_draw_color(*self.BORDER)
+        headings_style = FontFace(
+            emphasis="BOLD",
+            color=self.WHITE,
+            fill_color=self.NAVY,
+        )
 
-            x0 = self.get_x()
-            y0 = self.get_y()
-            fill_color = self.LIGHT if ri % 2 else self.WHITE
-            self.set_fill_color(*fill_color)
-            self.set_text_color(*self.DARK)
+        with self.table(
+            width=self.epw,
+            line_height=5,
+            text_align="LEFT",
+            v_align="TOP",
+            headings_style=headings_style,
+            first_row_as_headings=True,
+            repeat_headings=1,
+            cell_fill_color=self.LIGHT,
+            cell_fill_mode=TableCellFillMode.EVEN_ROWS,
+            padding=1.5,
+            wrapmode="WORD",
+        ) as table:
+            header_row = table.row()
+            for h in headers:
+                header_row.cell(self._s(str(h)))
+            for row in rows:
+                data_row = table.row()
+                for ci in range(ncols):
+                    val = self._s(str(row[ci])) if ci < len(row) else ""
+                    data_row.cell(val)
 
-            for ci, val in enumerate(cells):
-                x = x0 + sum(widths[:ci])
-                # Draw cell background and border
-                self.set_fill_color(*fill_color)
-                self.set_draw_color(*self.BORDER)
-                self.rect(x, y0, widths[ci], row_h, "DF")
-                # Write wrapped text
-                self.set_xy(x + 1.5, y0 + 1)
-                saved_margin = self.l_margin
-                self.l_margin = x + 1.5
-                self.multi_cell(widths[ci] - 3, line_h, val)
-                self.l_margin = saved_margin
-
-            self.set_xy(x0, y0 + row_h)
         self.ln(4)
         self.set_text_color(*self.DARK)
+        self.set_draw_color(*self.BORDER)
 
     def add_code(self, text):
         self.ln(2)

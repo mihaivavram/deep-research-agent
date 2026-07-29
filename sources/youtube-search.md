@@ -1,43 +1,60 @@
 Search YouTube for: $ARGUMENTS
 
-YouTube is the primary platform for long-form expert reviews, tutorials, and visual demonstrations. YouTube watch pages frequently block transcript extraction, so **use multiple extraction paths** rather than relying on direct watch-page fetches.
+YouTube hosts long-form expert reviews, tutorials, and demonstrations. **In this environment
+YouTube yields metadata and description-level signal only — transcripts are not obtainable.**
+Every documented transcript path has been tested and fails. Treat this source as *opportunistic*:
+run it for creator/reviewer signal, but do not budget it for depth or count it toward
+sub-question coverage.
 
-**Primary strategy — find videos via Google site-search:**
-Run 2–3 queries:
-- `site:youtube.com $ARGUMENTS` — broad sweep
-- `site:youtube.com $ARGUMENTS review OR tutorial OR explained` — bias toward substantive content
-- `site:youtube.com $ARGUMENTS 2025 OR 2026` — recency for time-sensitive topics
+## Access ladder
 
-**Transcript extraction — ordered fallback chain:**
-1. **Third-party transcript services (best path):** Extract the video ID from the YouTube URL (the `v=XXXX` parameter or `youtu.be/XXXX`). Then WebFetch one of these:
-   - `https://downsub.com/?url=https://www.youtube.com/watch?v=VIDEO_ID`
-   - `https://kome.ai/tools/youtube-transcript-generator?url=https://www.youtube.com/watch?v=VIDEO_ID`
-   These services render transcripts server-side and are usually fetchable.
-2. **YouTube search results page:** WebFetch `https://www.youtube.com/results?search_query=QUERY` — this renders server-side and includes video titles, channel names, view counts, and description snippets. Often enough signal without individual video pages.
-3. **Direct watch page extraction:** WebFetch the watch page URL. Even when transcripts are blocked, extract whatever renders: video title, channel name, view count, upload date, description text, and chapter titles (chapters appear as a structured outline of the video's content).
-4. **Channel pages:** For known authoritative channels, fetch `youtube.com/@CHANNEL/videos` to see their recent uploads and identify the most relevant video.
+**Verified working:**
+1. **General WebSearch (no `site:` scoping)** — searching the topic plus `youtube review` surfaces
+   video pages with titles, channel names, and description text in the result snippets. This is
+   the primary path.
+2. **Direct watch-page WebFetch** — inconsistent, but when it renders it yields title, channel,
+   view count, upload date, description, and chapter titles. Chapters are valuable: they are a
+   structured outline of the video's argument. Attempt for the 2-3 most promising videos only.
+3. **Channel video listings** — `youtube.com/@CHANNEL/videos` for a known authoritative channel.
+4. **Creator's own site / blog / podcast page** — reviewers with a YouTube channel usually publish
+   the same findings in text, which fetches cleanly. **This is often the highest-yield substitute:
+   go for the text version of the same creator's analysis.**
 
-**What to extract:**
+**Dead paths — do NOT attempt, all tested and failing:**
+- `youtube.com/results?search_query=` — returns footer navigation only
+- `youtube.com/api/timedtext` — returns empty
+- `youtubei/v1/player` — HTTP 405
+- `downsub.com` — app shell, no transcript
+- `youtubetotranscript.com` — HTTP 403
+- `kome.ai` transcript generator — unverified, assume dead with the rest
+- Invidious public instances (e.g. `inv.nadeko.net/api/v1/search`) — no response
+- `site:youtube.com` scoped WebSearch — returns SEO listicles, not YouTube pages
+
+## What to extract
+
 - Video title, channel name, upload date, view count
-- Full transcript text when available (this is the highest-value data)
-- Description text (creators often include key links, timestamps, and summaries)
-- Chapter titles if present (structured outline of video content)
-- Like/comment counts as engagement signals
-- Key claims, recommendations, product picks, or methodology from the content
+- Description text — creators often include their key picks, links, and summaries
+- Chapter titles if present (structured outline of the content)
+- Engagement counts as signal-strength indicators
+- The creator's text-published version of the same analysis, where one exists
 
-**When YouTube matters most:**
-- Product reviews and comparisons (hands-on demonstrations)
-- How-to and tutorial content
-- Conference talks and expert presentations
-- Creator/influencer opinion on trends
+## When YouTube matters / when to skip
 
-**When to deprioritize:**
-- Pure text-based research (academic, financial, legal)
-- Questions where written sources are more authoritative
+**Matters:** hands-on product demonstrations, how-to content, conference talks, creator opinion
+on trends — cases where a named reviewer's verdict is itself the evidence.
 
-**Do NOT:**
-- Skip a video just because the transcript is unavailable — title + description + chapter titles often provide the core signal
-- Prioritize clickbait titles with high views over lower-view videos from authoritative channels
-- Ignore the comments section — top comments often contain corrections, updates, or alternative recommendations
+**Skip entirely:** academic, financial, legal, or any topic where written sources are more
+authoritative. Given the transcript blackout, skip whenever the value would depend on what is
+*said* in the video rather than what the title and description assert.
 
-Return: key points from video content, noting video title, channel, view count, publish date, and URL. Flag whether findings came from full transcripts, descriptions only, or title/metadata-level extraction.
+## Do NOT
+
+- Spend fetches on any dead path listed above
+- Claim a video's argument from its title alone — a title is a claim, not evidence. Attribute at
+  the level you actually accessed it.
+- Count description-level findings toward the surviving-pages minimum for a sub-question
+- Prioritize high-view clickbait over lower-view videos from authoritative channels
+
+Return: key points with video title, channel, view count, publish date, and URL. **Always flag the
+extraction level** — description-only, metadata-only, or (rarely) full page. Never imply
+transcript-level access.
